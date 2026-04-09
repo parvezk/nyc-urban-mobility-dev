@@ -1,0 +1,180 @@
+<h2>Gen AI & Agentic Features — NYC Urban Mobility</h2>
+<p class="subtitle">Four strategic directions. Which excite you most? (Multi-select)</p>
+
+<style>
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+.feature-card {
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px 22px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  position: relative;
+}
+.feature-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.12);
+}
+.feature-card.selected {
+  border-color: #6366f1;
+  background: #f5f3ff;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.18);
+}
+.feature-card .icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+.feature-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 6px 0;
+}
+.feature-card .tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6366f1;
+  background: #ede9fe;
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-bottom: 10px;
+}
+.feature-card p {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0;
+}
+.feature-card ul {
+  margin: 8px 0 0 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  color: #374151;
+  line-height: 1.7;
+}
+.feature-card .wow {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #7c3aed;
+  font-style: italic;
+  font-weight: 500;
+}
+.difficulty {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.diff-medium { background: #fef3c7; color: #92400e; }
+.diff-high { background: #fee2e2; color: #991b1b; }
+.diff-low { background: #d1fae5; color: #065f46; }
+</style>
+
+<div class="feature-grid">
+  <div class="feature-card" data-choice="A" onclick="toggleSelect(this)">
+    <span class="difficulty diff-low">Quick Win</span>
+    <div class="icon">💬</div>
+    <div class="tag">Conversational AI</div>
+    <h3>Natural Language Map Copilot</h3>
+    <p>A floating chat/command bar where users ask questions in plain English and the map responds.</p>
+    <ul>
+      <li>"Show taxi demand in Midtown after midnight"</li>
+      <li>"Compare JFK vs LaGuardia pickups on Fridays"</li>
+      <li>"Where does congestion peak on weekday mornings?"</li>
+    </ul>
+    <div class="wow">→ Translates NL to spatial/temporal filters via Claude API + Supabase PostGIS</div>
+  </div>
+
+  <div class="feature-card" data-choice="B" onclick="toggleSelect(this)">
+    <span class="difficulty diff-low">Quick Win</span>
+    <div class="icon">📖</div>
+    <div class="tag">Generative Insights</div>
+    <h3>AI Narrative Engine</h3>
+    <p>As users pan/zoom/filter the map, an AI contextualizes what they're seeing — like a NYT Upshot caption that updates live.</p>
+    <ul>
+      <li>Auto-generated data story for the current view</li>
+      <li>Highlights statistical anomalies or patterns</li>
+      <li>"You're looking at 14,000 trips — 62% originate below 34th St."</li>
+    </ul>
+    <div class="wow">→ Claude streaming API reads current viewport + active filters</div>
+  </div>
+
+  <div class="feature-card" data-choice="C" onclick="toggleSelect(this)">
+    <span class="difficulty diff-medium">Medium Lift</span>
+    <div class="icon">🤖</div>
+    <div class="tag">Agentic Exploration</div>
+    <h3>AI Data Tour Agent</h3>
+    <p>An autonomous agent that creates and narrates guided "tours" through interesting patterns in the data.</p>
+    <ul>
+      <li>Auto-discovers 3–5 compelling insights in the dataset</li>
+      <li>Animates the map through each insight with narration</li>
+      <li>Users can branch off at any point to explore themselves</li>
+    </ul>
+    <div class="wow">→ Claude Agent SDK orchestrates map state + storytelling steps</div>
+  </div>
+
+  <div class="feature-card" data-choice="D" onclick="toggleSelect(this)">
+    <span class="difficulty diff-medium">Medium Lift</span>
+    <div class="icon">🔍</div>
+    <div class="tag">Anomaly Detection</div>
+    <h3>Pattern Intelligence & Alerts</h3>
+    <p>AI surfaces what's statistically unusual — automatically, without the user needing to look for it.</p>
+    <ul>
+      <li>Highlights sudden congestion spikes or demand voids</li>
+      <li>"Unusual drop in Lower Manhattan pickups — matches a transit disruption"</li>
+      <li>Smart bookmarking of anomalous time windows</li>
+    </ul>
+    <div class="wow">→ Runs on ingested Socrata data; AI explains the why, not just the what</div>
+  </div>
+
+  <div class="feature-card" data-choice="E" onclick="toggleSelect(this)">
+    <span class="difficulty diff-high">Ambitious</span>
+    <div class="icon">🔮</div>
+    <div class="tag">Predictive Analytics</div>
+    <h3>Congestion & Demand Forecasting</h3>
+    <p>Predict what traffic patterns will look like in the next 1–4 hours based on historical data + context.</p>
+    <ul>
+      <li>Overlay predicted congestion zones as a semi-transparent layer</li>
+      <li>Seasonal + event-aware (concerts, weather, holidays)</li>
+      <li>Uncertainty bands rendered as heatmap opacity</li>
+    </ul>
+    <div class="wow">→ Fine-tuned model or DuckDB + statistical baseline with AI explanation layer</div>
+  </div>
+
+  <div class="feature-card" data-choice="F" onclick="toggleSelect(this)">
+    <span class="difficulty diff-high">Ambitious</span>
+    <div class="icon">🗺️</div>
+    <div class="tag">Comparative Analysis</div>
+    <h3>AI Comparison Mode</h3>
+    <p>Side-by-side map views with AI-generated comparison summaries between two time windows, zones, or datasets.</p>
+    <ul>
+      <li>"Pre vs post-pandemic taxi patterns"</li>
+      <li>"How did congestion pricing change Manhattan pickups?"</li>
+      <li>AI generates a structured diff of what changed and why</li>
+    </ul>
+    <div class="wow">→ Split Deck.gl canvas + Claude comparing two dataset snapshots</div>
+  </div>
+</div>
+
+<p style="margin-top:20px; font-size:12px; color:#9ca3af; text-align:center;">Click one or more to select — then share your thoughts in the terminal</p>
+
+<script>
+// Enable multi-select
+document.addEventListener('DOMContentLoaded', function() {
+  var container = document.querySelector('.feature-grid');
+  if (container) container.setAttribute('data-multiselect', '');
+});
+</script>
