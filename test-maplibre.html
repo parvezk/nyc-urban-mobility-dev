@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Phase 0: MapLibre Carto Test</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .layer-box { position: absolute; padding: 10px; background: rgba(0,0,0,0.8); color: white; top: 10px; left: 10px; font-family: sans-serif; border-radius: 4px; z-index: 10;}
+    </style>
+</head>
+<body>
+    <div class="layer-box">
+        <h3>Architecture Validation</h3>
+        <p>MapLibre GL JS v4.7</p>
+        <p>Style: Carto Dark Matter</p>
+    </div>
+    <div id="map"></div>
+    <script>
+        // Use Carto Dark Matter style basemap without needing Mapbox API keys
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+            center: [-74.0, 40.72], // Lower Manhattan default focus
+            zoom: 12,
+            pitch: 60, // Simulate the 3D perspective angle used in the original app
+            bearing: -20
+        });
+
+        // Add 3D building extrusions test once style loads
+        map.on('load', () => {
+            // Carto dark-matter doesn't inherently have building extrusion data baked in at 3D. 
+            // Phase 3 PMTiles will supply this data. For now, this validates the 2D basemap load.
+        });
+    </script>
+</body>
+</html>

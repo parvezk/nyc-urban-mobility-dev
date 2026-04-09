@@ -1,0 +1,76 @@
+# Modernization and Full-Stack Transition Plan
+
+This document outlines the strategy for upgrading the 8-year-old NYC Urban Mobility data visualization project into a modern, production-ready full-stack application.
+
+## 1. Frontend Modernization
+
+Currently, the app uses legacy Webpack 2, React 16.2, and older versions of `deck.gl` and `react-map-gl`.
+
+### Framework & Bundler Migration
+
+- **Adopt Next.js (App Router) + Turbopack**: Replace the custom Webpack setup with Next.js using **Turbopack** (`next dev --turbo`). Turbopack provides near-instant local development server startups and fast HMR, avoiding the need for Vite while giving us full-stack capabilities (API routes).
+- **Upgrade React**: Move to React 18/19 to leverage concurrent rendering and Server Components. The existing class components (e.g., [Root](file:///Users/parvezkose/dev2/nyc-urban-mobility-dev/app.js#27-237) in [app.js](file:///Users/parvezkose/dev2/nyc-urban-mobility-dev/app.js)) will be refactored to modern functional components with hooks.
+
+### Mapping & Visualization Updates
+
+- **Update Deck.gl & React-Map-GL**: Upgrade to Deck.gl v9 and React-Map-GL v7+. These versions have drastically improved performance and API ergonomics.
+- **Map Provider**: Switch from Mapbox GL JS to **MapLibre GL JS** (the open-source fork) to ensure the project remains fully open source and avoids restrictive API pricing.
+
+### Styling & UI
+
+- **Tailwind CSS & shadcn/ui**: Replace the raw SASS ([styles/style.scss](file:///Users/parvezkose/dev2/nyc-urban-mobility-dev/styles/style.scss)) with Tailwind CSS for a scalable design system. Implement modern, responsive UI components using `shadcn/ui` (inspired by the provided UI screenshots).
+
+---
+
+## 2. Full-Stack Architecture
+
+The current app relies on loading small, static JSON files for Lower Manhattan. A true full-stack app needs dynamic data querying to support all of Manhattan without crashing the browser.
+
+### Database Layer
+
+- **NeonDB Serverless PostgreSQL + PostGIS**: Migrate the static datasets into NeonDB. It offers serverless scalability and integrates well with PostGIS for advanced spatial querying.
+- **ORM Setup**: Use **Drizzle ORM** for lightweight, type-safe SQL queries and schema management.
+
+### Backend (API Layer)
+
+- **Next.js API Route Handlers**: Utilize Next.js Route Handlers (`app/api/...`) to serve data dynamically based on map interactions (e.g., zooming, panning, or filtering by time/date).
+
+### Third-Party Live Data (NYC Open Data / Socrata)
+- **Socrata API Integration**: To pull live data (like the SIP-Corridors dataset), we will use the SODA (Socrata Open Data API). While public, we will generate an **App Token** on the developer portal and pass it as an `X-App-Token` HTTP header. This raises the throttle limit to 1,000 requests/hour to prevent rate-limiting during client usage. Next.js API routes will cache these downstream requests to prevent spamming Socrata.
+
+### Data Delivery & Data Pipelines
+To expand coverage from Lower Manhattan to **Full Manhattan**:
+1. **3D Buildings (Vector Tiles)**: The full NYC 3D Building model (DoITT 2014) is massive. We will download the raw CityGML/Shapefile data from NYC Open Data, convert it to Vector Tiles (using a tool like `tippecanoe`), and host the static `.mbtiles` files or serve them dynamically (via `Martin` or `pg_tileserv`). **Note:** This conversion with `tippecanoe` is a **one-time local effort** because the building footprints rarely change.
+2. **Taxi Trips (Data Processing & Pipelines)**: Raw NYC TLC Trip Record data consists of hundreds of millions of rows. BigQuery was originally used because client browsers simply cannot process raw trip tables of that size.
+   - *Updated Strategy (DuckDB)*: Since you are familiar with SQL, we can use **DuckDB** locally via Node.js (or Python) to process the raw massive CSV/Parquet files of TLC trips into smaller aggregates natively. The resulting aggregated slices can then be seeded into **NeonDB**. DuckDB is perfectly suited for this over heavier cloud DBs.
+3. **Exploratory Data Analysis**: **Observablehq** and Arquero are fantastic tools for visually exploring the raw data locally before finalizing what metrics we want to visualize in our Drizzle queries.
+
+### Deployment & Infrastructure (Vercel)
+- **Hosting Strategy**: We will deploy the full-stack Next.js app to **Vercel**, integrating seamlessly with **NeonDB**. Vercel is highly recommended over AWS for Next.js (App Router) as it requires essentially zero configuration, giving us Serverless API routes, optimized edge caching, and preview deployments out of the box. An equivalent AWS stack (Amplify or raw ECS/CloudFront) would involve significantly more DevEx overhead for this scale.
+
+---
+
+## 3. Library Roles Clarified
+
+- **MapLibre GL JS vs Deck.gl**: We need both! **MapLibre GL JS** acts as the *basemap* (drawing the streets, water, and text labels for geospatial context). **Deck.gl** sits *on top* of the basemap and acts as the high-performance data visualization engine (drawing millions of interactive 3D bars, arcs, heatmaps, and scatterplots across the GPU using WebGL).
+- **PostgreSQL vs PostGIS**: **PostGIS** is simply an extension for PostgreSQL that enables powerful spatial SQL queries. Without PostGIS, a database only stores text or numbers. *With* PostGIS, we can run queries like: *"SELECT trips WHERE the pickup coordinate is within 500 meters of Central Park's spatial polygon (`ST_DWithin`)"*, making it crucial for dynamic mapping.
+
+---
+
+## Proposed Roadmap
+
+If you are aligned, here is our phased approach:
+
+1. **Phase 1: Frontend Porting**
+   - Initialize a fresh Next.js project with Tailwind CSS.
+   - Refactor [app.js](file:///Users/parvezkose/dev2/nyc-urban-mobility-dev/app.js), [LayerControl.js](file:///Users/parvezkose/dev2/nyc-urban-mobility-dev/LayerControl.js), and [DeckglOverlay.js](file:///Users/parvezkose/dev2/nyc-urban-mobility-dev/DeckglOverlay.js) into modern React Functional Components.
+   - Upgrade the Deck.gl and mapping dependencies, running purely on the local static data initially.
+2. **Phase 2: Database & Backend Integration**
+   - Set up a local PostgreSQL/PostGIS instance (typically via Docker).
+   - Write seed scripts to load the `/data/` JSON/CSV files into the database.
+   - Create Next.js API endpoints to serve this data dynamically to the frontend.
+3. **Phase 3: Optimization & Features**
+   - Implement Vector Tile rendering for the Buildings layer.
+   - Add new features like specific time filters, routing variations, or user authentication to save favorite map views.
+
+Let me know what you think of this architecture, and if you would like me to begin executing **Phase 1**!
