@@ -29,5 +29,6 @@ Thumbs.db
 
 # misc
 movements/
+agent-needs.txt
 *.tsbuildinfo
 next-env.d.ts
