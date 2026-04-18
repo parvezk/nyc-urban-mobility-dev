@@ -36,7 +36,12 @@ export async function GET(request: Request) {
     // Note: Even if 'trips' table doesn't exist yet, the API request itself 
     // counts as activity and resets the Supabase pause timer!
 
-    console.log("Supabase Keep-Alive Cron Executed", { error: error?.message });
+    if (error) {
+      console.error("Supabase Keep-Alive Cron Query Error:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    console.log("Supabase Keep-Alive Cron Executed successfully");
 
     return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
   } catch (error: any) {

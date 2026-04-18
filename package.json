@@ -9,7 +9,8 @@
     "luma.gl": ">=5.2.0-alpha.11",
     "react": "^16.2.0",
     "react-dom": "^16.2.0",
-    "react-map-gl": "^3.2.0"
+    "react-map-gl": "^3.2.0",
+    "@supabase/supabase-js": "^2.103.0"
   },
   "devDependencies": {
     "buble-loader": "^0.4.0",
