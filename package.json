@@ -1,24 +1,40 @@
 {
+  "name": "nyc-urban-mobility-dev",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "start-local": "webpack-dev-server --env.local --progress --hot --open",
-    "start": "webpack-dev-server --progress --hot --open"
+    "dev": "next dev --turbo",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "deck.gl": "^6.4.0",
-    "@deck.gl/experimental-layers": "^6.4.0",
-    "luma.gl": ">=5.2.0-alpha.11",
-    "react": "^16.2.0",
-    "react-dom": "^16.2.0",
-    "react-map-gl": "^3.2.0"
+    "@deck.gl/core": "^9.0.0",
+    "@deck.gl/geo-layers": "^9.0.0",
+    "@deck.gl/layers": "^9.0.0",
+    "@deck.gl/react": "^9.0.0",
+    "@duckdb/node-api": "^1.5.2-r.1",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
+    "@vis.gl/react-maplibre": "^8.1.1",
+    "deck.gl": "^9.0.0",
+    "lucide-react": "^0.453.0",
+    "maplibre-gl": "^4.7.1",
+    "next": "15.5.15",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-map-gl": "^8.1.1",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "buble-loader": "^0.4.0",
-    "css-loader": "0.28.11",
-    "html-webpack-plugin": "3.2.0",
-    "node-sass": "4.8.3",
-    "sass-loader": "6.0.7",
-    "style-loader": "0.21.0",
-    "webpack": "^2.2.0",
-    "webpack-dev-server": "^2.2.0"
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.27",
+    "eslint": "^8",
+    "eslint-config-next": "15.5.15",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
   }
 }

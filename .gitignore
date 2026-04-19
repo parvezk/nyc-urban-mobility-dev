@@ -1,3 +1,34 @@
-.DS_Store
+# dependencies
 node_modules/
+
+# next.js build output
+.next/
+out/
+
+# production build
+build/
+dist/
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# misc
 movements/
+agent-needs.txt
+*.tsbuildinfo
+next-env.d.ts
