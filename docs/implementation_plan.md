@@ -126,3 +126,37 @@ To ensure the architecture is reproducible, the data pipeline will be codified.
 
 - Introduce Tailwind CSS and `shadcn/ui`.
 - Execute the Figma Hand-off and implement the minimalist "Anti-DevTool" editorial aesthetic scoped in the `ux_design_spec.md` document.
+
+---
+
+## 7. Task Tracker
+
+Progress checklist across all phases. Ticket IDs map to the project backlog.
+
+### Phase 0: Architecture Validation & Security
+- [x] **[PK-165]** Revoke Mapbox keys from legacy codebase & establish `.env.local`
+- [x] **[PK-166]** Create simple HTML MapLibre script to validate Carto Dark Matter style
+- [ ] **[PK-167]** Convert 3D Buildings into `.pmtiles` (setup tippecanoe)
+
+### Phase 1: Greenfield Rip & Replace
+- [x] Initialize `create-next-app` (TypeScript, App Router)
+- [x] Setup Tailwind CSS
+- [x] Install Deck.gl and MapLibre dependencies
+- [x] Copy raw Data folders to the new project
+- [x] Rebuild basic Map Component with Carto Dark Matter basemap
+- [x] Implement trips using the native `@deck.gl/geo-layers` TripsLayer
+
+### Phase 2: Backend and Data Pipeline
+- [x] **[PK-172]** Stand up Postgres/PostGIS (local + Supabase)
+- [x] **[PK-173]** Implement DuckDB preprocessing scripts (includes downloading APIs, DuckDB spatial mapping, and OSRM artificial street routing)
+- [x] **[PK-174]** Replace local file reads with API-backed queries (Write Next.js API Routes & Supabase seeder)
+
+### Phase 3: Scale and Polish
+- [ ] **[PK-175]** Introduce production PMTiles pipeline (CDN strategy for 3D buildings)
+- [ ] **[PK-176]** Live edge caching strategy
+- [ ] **[PK-177]** Implement GitHub Actions scheduled ingestion script
+- [ ] Add Playwright Smoke checks
+
+### Phase 4: UI Redesign
+- [ ] Implement minimalist UI aesthetic based on UX Spec
+- [ ] Setup shadcn/ui components for layer controls
