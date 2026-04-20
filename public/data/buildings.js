@@ -1,0 +1,1 @@
+export const BUILDINGS = "https://raw.githubusercontent.com/uber-common/deck.gl-data/master/examples/trips/buildings.json";

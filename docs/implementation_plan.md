@@ -102,6 +102,7 @@ To ensure the architecture is reproducible, the data pipeline will be codified.
 - Delete Mapbox keys and map data schemas.
 - Validate Carto Dark Matter style compatibility in a MapLibre test script.
 - Convert 3D Buildings into `.pmtiles` and test local HTTP Range fetching.
+- **[Ingestion Research]** Research 2025-2026 TLC Yellow Taxi data via direct Parquet downloads from the NYC CDN (bypass Socrata API limits).
 
 ### Phase 1: Greenfield Rip & Replace (Parity First)
 
@@ -137,6 +138,7 @@ Progress checklist across all phases. Ticket IDs map to the project backlog.
 - [x] **[PK-165]** Revoke Mapbox keys from legacy codebase & establish `.env.local`
 - [x] **[PK-166]** Create simple HTML MapLibre script to validate Carto Dark Matter style
 - [ ] **[PK-167]** Convert 3D Buildings into `.pmtiles` (setup tippecanoe)
+- [ ] **[PK-200]** Ingest 2025-2026 TLC Yellow Taxi data via direct Parquet downloads
 
 ### Phase 1: Greenfield Rip & Replace
 - [x] Initialize `create-next-app` (TypeScript, App Router)
