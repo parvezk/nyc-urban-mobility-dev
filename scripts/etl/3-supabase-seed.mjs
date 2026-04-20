@@ -27,7 +27,7 @@ async function seed() {
       console.error("❌ Supabase Insertion Failed on chunk:", error);
       if (error.code === "42P01")
         console.error("👉 TIP: Did you forget to CREATE TABLE trips in Supabase?");
-      return;
+      throw error;
     }
     successCount += chunk.length;
   }

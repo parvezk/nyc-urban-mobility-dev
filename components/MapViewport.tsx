@@ -43,8 +43,11 @@ export default function MapViewport() {
 
     fetch('/api/trips')
       .then(res => res.json())
-      .then((data: any[]) => {
-        if (!data || data.length === 0) return;
+      .then((data: any) => {
+        if (!Array.isArray(data) || data.length === 0) {
+          console.warn('Trips API returned invalid data or empty set:', data);
+          return;
+        }
         
         // Find the absolute authentic min and max timestamps
         const absoluteMin = Math.min(...data.map(d => d.path[0][2]));
