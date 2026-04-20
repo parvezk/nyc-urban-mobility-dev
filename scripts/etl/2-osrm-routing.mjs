@@ -108,4 +108,7 @@ async function runRouter() {
     console.log(`💾 Persisted final Deck.gl arrays to -> ${OUT_PATH}`);
 }
 
-runRouter().catch(console.error);
+runRouter().catch(err => {
+    console.error(err);
+    process.exit(1);
+});

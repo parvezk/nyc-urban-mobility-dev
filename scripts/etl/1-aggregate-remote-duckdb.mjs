@@ -70,8 +70,8 @@ async function runDuckDB() {
             zones AS (
                 SELECT 
                     LocationID::BIGINT as loc_id,
-                    ST_Y(ST_Centroid(ST_Transform(geom, 'EPSG:2263', 'EPSG:4326'))) as lng,
-                    ST_X(ST_Centroid(ST_Transform(geom, 'EPSG:2263', 'EPSG:4326'))) as lat
+                    ST_X(ST_Centroid(ST_Transform(geom, 'EPSG:2263', 'OGC:CRS84'))) as lng,
+                    ST_Y(ST_Centroid(ST_Transform(geom, 'EPSG:2263', 'OGC:CRS84'))) as lat
                 FROM ST_Read('${SHP_PATH}')
             )
             SELECT 
