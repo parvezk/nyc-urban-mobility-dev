@@ -167,7 +167,7 @@ export default function MapViewport() {
     <div className="relative w-full h-screen overflow-hidden">
       <DeckGL
         viewState={viewState}
-        onViewStateChange={e => setViewState(e.viewState)}
+        onViewStateChange={e => setViewState(e.viewState as any)}
         controller={true}
         layers={layers}
         pickingRadius={20}

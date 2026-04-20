@@ -32,3 +32,8 @@ movements/
 agent-needs.txt
 *.tsbuildinfo
 next-env.d.ts
+
+# ETL Artifacts
+scripts/etl/*.json
+scripts/etl/taxi_zones/
+scripts/etl/taxi_zones.zip
