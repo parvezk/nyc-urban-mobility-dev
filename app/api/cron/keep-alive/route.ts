@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { getSupabaseCredentials } from "./supabase-credentials";
 
 export async function GET(request: Request) {
   try {
@@ -13,28 +14,15 @@ export async function GET(request: Request) {
     }
 
     // 2. Initialize Supabase client
-    // For a simple background cron job, we bypass the cookie-based SSR client 
-    // and just use the standard supabase-js client to run a simple keep-alive query.
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY; // Or SERVICE_ROLE_KEY if you have one
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error("Missing Supabase credentials");
-    }
-
+    // Cron runs server-side, so prefer the service role key when Vercel provides it.
+    const { supabaseUrl, supabaseKey } = getSupabaseCredentials();
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 3. Ping the database. We can query the pg_stat_activity view or just do a simple dummy query.
-    // Drizzle doesn't have a direct raw ping from the frontend, but using Supabase RPC or a simple select 
-    // from a basic table (or even catching an expected table not found error) counts as an API hit!
-    // Often, a simple RPC call to a dummy function (if you make one) or fetching 1 row from an existing table works.
-    
-    // Here we use supabase.rpc to execute a dummy health check if it exists, 
-    // OR we simply hit an arbitrary table to register "activity" on the PostgREST API.
-    const { data, error } = await supabase.from('trips').select('id').limit(1);
-
-    // Note: Even if 'trips' table doesn't exist yet, the API request itself 
-    // counts as activity and resets the Supabase pause timer!
+    // 3. Ping a known column from the trips table to register database activity.
+    const { error } = await supabase
+      .from("trips")
+      .select("vendor_type", { count: "exact", head: true })
+      .limit(1);
 
     if (error) {
       console.error("Supabase Keep-Alive Cron Query Error:", error.message);
@@ -44,8 +32,9 @@ export async function GET(request: Request) {
     console.log("Supabase Keep-Alive Cron Executed successfully");
 
     return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
-  } catch (error: any) {
-    console.error("Keep-Alive Cron Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown keep-alive cron error";
+    console.error("Keep-Alive Cron Error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
