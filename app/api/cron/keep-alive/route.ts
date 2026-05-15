@@ -5,6 +5,21 @@ import { getSupabaseCredentials } from "./supabase-credentials";
 /** Avoid static/route caching so each cron tick hits the runtime and PostgREST (Vercel + Next.js cron guidance). */
 export const dynamic = "force-dynamic";
 
+const UNREACHABLE_HINT =
+  "Supabase REST host unreachable. Paused Free-tier projects reject API traffic until you click Resume in the Supabase dashboard. Other causes include a typo in NEXT_PUBLIC_SUPABASE_URL or a temporary Supabase outage.";
+
+function upstreamLooksUnreachable(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("fetch failed") ||
+    m.includes("networkerror") ||
+    m.includes("econnreset") ||
+    m.includes("enotfound") ||
+    m.includes("etimedout") ||
+    m.includes("socket hang up")
+  );
+}
+
 function cronSecretMatchesAuthorization(request: Request, secret: string): boolean {
   const authHeader = request.headers.get("authorization");
   const match = authHeader?.match(/^Bearer\s+(.*)$/i);
@@ -41,16 +56,30 @@ export async function GET(request: Request) {
       .limit(1);
 
     if (error) {
-      console.error("Supabase Keep-Alive Cron Query Error:", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const unreachable = upstreamLooksUnreachable(error.message);
+      console.error(
+        unreachable
+          ? `Supabase Keep-Alive Cron upstream unreachable (${error.message}): ${UNREACHABLE_HINT}`
+          : `Supabase Keep-Alive Cron Query Error: ${error.message}`,
+      );
+      return NextResponse.json(
+        unreachable
+          ? { error: error.message, hint: UNREACHABLE_HINT }
+          : { error: error.message },
+        { status: unreachable ? 503 : 500 },
+      );
     }
 
     console.log("Supabase Keep-Alive Cron Executed successfully");
 
     return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown keep-alive cron error";
-    console.error("Keep-Alive Cron Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const rawMessage = error instanceof Error ? error.message : "Unknown keep-alive cron error";
+    const unreachable = upstreamLooksUnreachable(rawMessage);
+    const body = unreachable ? { error: rawMessage, hint: UNREACHABLE_HINT } : { error: rawMessage };
+    console.error(
+      unreachable ? `Keep-Alive Cron upstream unreachable: ${UNREACHABLE_HINT} (${rawMessage})` : `Keep-Alive Cron Error: ${rawMessage}`,
+    );
+    return NextResponse.json(body, { status: unreachable ? 503 : 500 });
   }
 }
