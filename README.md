@@ -26,7 +26,7 @@ NYC Urban Mobility turns taxi trip activity into an explorable 3D city scene. It
 
 The geospatial visualization highlights where demand concentrates, how trips move through dense downtown corridors, and how high-activity areas emerge around the Financial District. Users can pan, zoom, rotate, play or pause the rush-hour timeline, and jump into a highlighted hotspot without needing to read dense tables or interpret raw trip records.
 
-The centerpiece is the Deck.gl `TripsLayer` motion visualization. Animated paths trace taxi movement through Lower Manhattan while a pulsing Financial District hotspot calls attention to outbound demand, making urban mobility patterns visible as motion instead of static points.
+The centerpiece is the motion visualization of the taxi trips. Animated paths trace taxi movement through Lower Manhattan while a pulsing Financial District hotspot calls attention to outbound demand, making urban mobility patterns visible as motion instead of static points.
 
 ## Tech Stack
 
