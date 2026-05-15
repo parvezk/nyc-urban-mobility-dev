@@ -37,3 +37,15 @@ assert.throws(
   /Missing Supabase credentials/,
   "cron route should fail clearly when no usable key is configured",
 );
+
+assert.deepEqual(
+  getSupabaseCredentials({
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co/",
+    SUPABASE_SERVICE_ROLE_KEY: "  service\n",
+  }),
+  {
+    supabaseUrl: baseEnv.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey: "service",
+  },
+  "cron env should tolerate trailing slashes and trimmed keys",
+);
