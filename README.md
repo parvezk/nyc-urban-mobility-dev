@@ -36,12 +36,10 @@ The centerpiece is the motion visualization of the taxi trips. Animated paths tr
 | Map renderer  | MapLibre GL via `react-map-gl`                                          |
 | Visualization | Deck.gl `TripsLayer`, `PolygonLayer`, `ScatterplotLayer`                |
 | Vector tiles  | PMTiles (served from static CDN via HTTP Range requests)                |
-| Data API      | Next.js Route Handlers                                                  |
 | Data store    | Supabase PostgreSQL + PostGIS via Drizzle ORM, with local JSON fallback |
 | ETL           | DuckDB, Socrata NYC Open Data, OSRM routing, Supabase seed scripts      |
 | Observability | Sentry (errors and performance), PostHog (product analytics)            |
-| Testing       | Playwright (visual smoke tests, E2E)                                    |
-| Deployment    | Vercel                                                                  |
+| CI & CD       | Vercel, Playwright (visual smoke tests, E2E)                            |
 
 ## High-Level Architecture
 
