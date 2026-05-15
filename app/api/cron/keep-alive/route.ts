@@ -2,14 +2,30 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getSupabaseCredentials } from "./supabase-credentials";
 
+/** Avoid static/route caching so each cron tick hits the runtime and PostgREST (Vercel + Next.js cron guidance). */
+export const dynamic = "force-dynamic";
+
+function cronSecretMatchesAuthorization(request: Request, secret: string): boolean {
+  const authHeader = request.headers.get("authorization");
+  const match = authHeader?.match(/^Bearer\s+(.*)$/i);
+  const token = match?.[1]?.trim();
+  return token === secret.trim();
+}
+
 export async function GET(request: Request) {
   try {
-    // 1. Verify the request is coming from Vercel Cron
-    const authHeader = request.headers.get("Authorization");
-    if (
-      process.env.CRON_SECRET &&
-      authHeader !== `Bearer ${process.env.CRON_SECRET}`
-    ) {
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const userAgent = request.headers.get("user-agent") ?? "";
+    const isVercelCronUserAgent = userAgent.includes("vercel-cron");
+
+    // Prefer CRON_SECRET (Vercel injects Authorization: Bearer … on cron invocations). Trim env to avoid stray newlines breaking auth (Vercel KB).
+    const authorized =
+      cronSecret !== undefined && cronSecret.length > 0
+        ? cronSecretMatchesAuthorization(request, cronSecret)
+        : isVercelCronUserAgent;
+
+    if (!authorized) {
+      console.error("Keep-Alive Cron: Unauthorized (check CRON_SECRET and Vercel production env)");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
