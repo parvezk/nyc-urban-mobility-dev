@@ -16,37 +16,35 @@ Interactive 3D geospatial storytelling for NYC taxi movement, street-level trave
 
 ![NYC Urban Mobility main cover showing animated trip layer motion across Manhattan](./public/readme/nyc-urban-mobility-main-cover.png)
 
-| Financial District focus | Trip layer motion |
-| --- | --- |
+| Financial District focus                                                                            | Trip layer motion                                                                                   |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | ![Financial District zoomed 3D mobility hotspot](./public/readme/nyc-urban-mobility-fidi-focus.png) | ![Trip layer motion zoomed over Lower Manhattan](./public/readme/nyc-urban-mobility-trip-layer.png) |
 
 ## Overview
 
 NYC Urban Mobility turns taxi trip activity into an explorable 3D city scene. It combines an elevated Manhattan map, extruded building footprints, animated trip paths, and a time scrubber so viewers can understand how movement changes during an evening rush window.
 
-From a product perspective, the app is built as a focused mobility intelligence experience rather than a generic dashboard. It highlights where demand concentrates, how trips move through dense downtown corridors, and how high-activity areas emerge around the Financial District.
-
-The UX is designed for quick visual comprehension. Users can pan, zoom, rotate, play or pause the rush-hour timeline, and jump into a highlighted hotspot without needing to read dense tables or interpret raw trip records.
+The geospatial visualization highlights where demand concentrates, how trips move through dense downtown corridors, and how high-activity areas emerge around the Financial District. Users can pan, zoom, rotate, play or pause the rush-hour timeline, and jump into a highlighted hotspot without needing to read dense tables or interpret raw trip records.
 
 The centerpiece is the Deck.gl `TripsLayer` motion visualization. Animated paths trace taxi movement through Lower Manhattan while a pulsing Financial District hotspot calls attention to outbound demand, making urban mobility patterns visible as motion instead of static points.
 
 ## Tech Stack
 
-| Area | Technology |
-| --- | --- |
-| App framework | Next.js App Router, React 19 |
-| Language | TypeScript (strict) |
-| Styling | Tailwind CSS, shadcn/ui |
-| Map renderer | MapLibre GL via `react-map-gl` |
-| Visualization | Deck.gl `TripsLayer`, `PolygonLayer`, `ScatterplotLayer` |
-| Vector tiles | PMTiles (served from static CDN via HTTP Range requests) |
-| State and interaction | Zustand for UI state, Deck.gl internal clock for animation |
-| Data API | Next.js Route Handlers |
-| Data store | Supabase PostgreSQL + PostGIS via Drizzle ORM, with local JSON fallback |
-| ETL | DuckDB, Socrata NYC Open Data, OSRM routing, Supabase seed scripts |
-| Observability | Sentry (errors and performance), PostHog (product analytics) |
-| Testing | Playwright (visual smoke tests, E2E) |
-| Deployment | Vercel |
+| Area                  | Technology                                                              |
+| --------------------- | ----------------------------------------------------------------------- |
+| App framework         | Next.js App Router, React 19                                            |
+| Language              | TypeScript (strict)                                                     |
+| Styling               | Tailwind CSS, shadcn/ui                                                 |
+| Map renderer          | MapLibre GL via `react-map-gl`                                          |
+| Visualization         | Deck.gl `TripsLayer`, `PolygonLayer`, `ScatterplotLayer`                |
+| Vector tiles          | PMTiles (served from static CDN via HTTP Range requests)                |
+| State and interaction | Zustand for UI state, Deck.gl internal clock for animation              |
+| Data API              | Next.js Route Handlers                                                  |
+| Data store            | Supabase PostgreSQL + PostGIS via Drizzle ORM, with local JSON fallback |
+| ETL                   | DuckDB, Socrata NYC Open Data, OSRM routing, Supabase seed scripts      |
+| Observability         | Sentry (errors and performance), PostHog (product analytics)            |
+| Testing               | Playwright (visual smoke tests, E2E)                                    |
+| Deployment            | Vercel                                                                  |
 
 ## High-Level Architecture
 
@@ -123,21 +121,21 @@ The app uses preprocessed trip paths rather than live vehicle telemetry. NYC TLC
 
 ## Available Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Start the Next.js dev server with Turbopack on `localhost:3000` |
-| `npm run build` | Build the production bundle |
-| `npm run start` | Run the built production server |
-| `npm run typecheck` | Run `tsc --noEmit` to validate TypeScript |
+| Script              | Purpose                                                         |
+| ------------------- | --------------------------------------------------------------- |
+| `npm run dev`       | Start the Next.js dev server with Turbopack on `localhost:3000` |
+| `npm run build`     | Build the production bundle                                     |
+| `npm run start`     | Run the built production server                                 |
+| `npm run typecheck` | Run `tsc --noEmit` to validate TypeScript                       |
 
 ## Environment Variables
 
 Create a `.env.local` file at the project root. **Do not commit this file.**
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `DATABASE_URL` | Required for live data | Supabase / Postgres connection string used by `/api/trips` to read routed trips. When unset, the API falls back to the local JSON file produced by the ETL pipeline. |
-| `SOCRATA_APP_TOKEN` | Optional | NYC Open Data app token used by the ETL ingestion scripts. Raises Socrata rate limits to ~1k requests/hour. Not required at runtime. |
+| Variable            | Required               | Purpose                                                                                                                                                              |
+| ------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`      | Required for live data | Supabase / Postgres connection string used by `/api/trips` to read routed trips. When unset, the API falls back to the local JSON file produced by the ETL pipeline. |
+| `SOCRATA_APP_TOKEN` | Optional               | NYC Open Data app token used by the ETL ingestion scripts. Raises Socrata rate limits to ~1k requests/hour. Not required at runtime.                                 |
 
 ## Testing
 
