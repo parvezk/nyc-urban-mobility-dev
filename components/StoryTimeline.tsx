@@ -66,7 +66,7 @@ export default function StoryTimeline({
             </p>
             {dayStats && (
               <p className="text-[10px] text-slate-500 font-medium tracking-wide mt-0.5">
-                Peak: {dayStats.peakActive} bikes in motion at {dayStats.peakMinute}
+                Peak: {dayStats.peakActive} bikes in motion at {formatTime(dayStats.peakEpochMs)}
               </p>
             )}
           </div>

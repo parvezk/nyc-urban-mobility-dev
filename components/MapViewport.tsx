@@ -121,14 +121,20 @@ export default function MapViewport() {
 
   // 1b. Open mid-rush: once both trips and day-stats have loaded, jump the clock
   // to 08:00 AM (America/New_York) of the story's date, clamped to the trip range.
-  // DST caveat: the -04:00 offset is EDT (summer), which is correct for the real
-  // June-2026 dataset. For the Dec mock, 8 AM EDT lands before minTime and simply
-  // clamps to minTime — the intended behavior.
+  // The offset is derived per-date via Intl, so summer (EDT) and winter (EST)
+  // datasets both open at true 8 AM local.
   useEffect(() => {
     if (didInitTime.current) return;
     if (!dayStats || maxTime === 1) return; // wait for both trips + day-stats
 
-    const eightAm = new Date(`${dayStats.date}T08:00:00-04:00`).getTime();
+    // Resolve the NY UTC offset for this specific date (EDT -04:00 vs EST -05:00)
+    // so the 8 AM jump stays correct if the ETL is ever re-pointed at a winter day.
+    const offsetName = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', timeZoneName: 'longOffset'
+    }).formatToParts(new Date(`${dayStats.date}T12:00:00Z`))
+      .find(p => p.type === 'timeZoneName')?.value ?? 'GMT-05:00';
+    const nyOffset = offsetName.replace('GMT', '') || '-05:00';
+    const eightAm = new Date(`${dayStats.date}T08:00:00${nyOffset}`).getTime();
     const clamped = Math.max(minTime, Math.min(maxTime, eightAm));
     setTime(clamped);
     didInitTime.current = true;

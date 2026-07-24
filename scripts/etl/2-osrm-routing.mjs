@@ -43,8 +43,7 @@ async function runRouter() {
         try {
             // Ping local OSRM. NOTE: overview=simplified proved too aggressive for street-level
             // animation (6 points on a 2km trip = chords cutting through blocks). We fetch the
-            // full geometry and downsample to every 3rd vertex instead — paths still hug the
-            // streets (~30m spacing) at ~1/3 of the payload.
+            // full geometry and downsample instead — see the filter below for the ratio.
             const res = await fetch(`${OSRM_BASE}/${startCoords};${endCoords}?overview=full&geometries=geojson`);
 
             const data = await res.json();
