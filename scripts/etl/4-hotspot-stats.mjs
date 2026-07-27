@@ -10,16 +10,18 @@
  *   public/data/hotspots.json   { bucketMs, clusters:[{ lng, lat, name, counts:[[bucketEpochMs, activeCount],…] }] }
  *
  * --- TIMEZONE / EPOCH PARITY (critical) ------------------------------------
- * Stage 2 turns each trip time into an epoch via `new Date(str).getTime()`,
- * which — on this America/New_York machine — parses the zone-less CSV string
- * as NY local wall-clock time. We MUST produce peakEpochMs / bucketEpochMs the
- * SAME way, or the overlay markers land hours off the animated trips.
+ * Stage 2 turns each trip time into an epoch via `nyWallClockToEpochMs()`
+ * (lib/ny-time.mjs), which parses the zone-less CSV string as America/New_York
+ * wall-clock time using a fixed IANA zone lookup — independent of the host
+ * machine's timezone. We MUST produce peakEpochMs / bucketEpochMs the SAME
+ * way, or the overlay markers land hours off the animated trips.
  *
  * If we instead computed epochs inside DuckDB (e.g. epoch_ms(started_at)),
  * DuckDB would treat the naive TIMESTAMP as UTC and the result would be 4h off
  * (EDT). So we pull the day's rows out of DuckDB as *strings* and do the sweep
- * + bucketing in JS with `new Date(str).getTime()` — byte-for-byte parity with
- * Stage 2. A full Citi Bike day is ~200k rows; the in-memory sweep is trivial.
+ * + bucketing in JS with `nyWallClockToEpochMs()` — byte-for-byte parity with
+ * Stage 2, on any host timezone. A full Citi Bike day is ~200k rows; the
+ * in-memory sweep is trivial.
  * We assert the parity at the end (peakEpochMs formats back to peakMinute).
  *
  * The date is derived from Stage 1's output_centroids.json (first pickup_time)
@@ -29,6 +31,7 @@
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
 import path from 'path';
+import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
 
 const ETL_DIR = path.join(process.cwd(), 'scripts', 'etl');
 const CSV_GLOB = path.join(ETL_DIR, '202606', '*.csv');
@@ -77,8 +80,8 @@ async function loadDay(con, day) {
     `;
     const reader = await con.runAndReadAll(query);
     return reader.getRowObjects().map((r) => {
-        const startMs = new Date(String(r.started_at)).getTime();
-        const endMs = new Date(String(r.ended_at)).getTime();
+        const startMs = nyWallClockToEpochMs(String(r.started_at));
+        const endMs = nyWallClockToEpochMs(String(r.ended_at));
         return {
             startMs, endMs,
             startStr: String(r.started_at), // retained for a genuine TZ round-trip check

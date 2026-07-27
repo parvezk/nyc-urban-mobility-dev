@@ -7,6 +7,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
 
 // Local OSRM bicycle-profile routing server (Docker). Override with OSRM_BASE env var.
 const OSRM_BASE = process.env.OSRM_BASE || "http://localhost:5000/route/v1/bicycle";
@@ -57,8 +58,11 @@ async function runRouter() {
                     (_, idx) => idx === 0 || idx === fullLineString.length - 1 || idx % 4 === 0
                 );
                 
-                const pickupMs = new Date(trip.pickup_time).getTime();
-                const dropoffMs = new Date(trip.dropoff_time).getTime();
+                // Fixed America/New_York parse — NOT `new Date(str)`, which would
+                // parse in the host's local zone and shift every trip by the
+                // UTC offset (4-5h) on a non-NY host (e.g. a UTC CI runner).
+                const pickupMs = nyWallClockToEpochMs(trip.pickup_time);
+                const dropoffMs = nyWallClockToEpochMs(trip.dropoff_time);
                 const diffMs = dropoffMs - pickupMs;
 
                 // Mathematical interpolation across the line string vertices

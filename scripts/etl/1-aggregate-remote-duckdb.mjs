@@ -17,18 +17,22 @@
  * --- TIMEZONE (critical) ---------------------------------------------------
  * The CSV started_at/ended_at strings are New York LOCAL wall-clock time with
  * NO zone suffix (e.g. "2026-06-10 08:05:03.403"). We emit them as zone-less
- * ISO strings ("2026-06-10T08:05:03.403"). Stage 2 later does
- * `new Date(pickup_time).getTime()`, and the JS Date constructor parses a
- * zone-less ISO string in the MACHINE's local zone. This Mac is
- * America/New_York, so the epoch it produces matches the wall-clock intent.
+ * ISO strings ("2026-06-10T08:05:03.403"). Stage 2 and Stage 4 turn these
+ * into epochs via `nyWallClockToEpochMs()` (lib/ny-time.mjs), which parses
+ * the string as America/New_York wall-clock time using a fixed IANA zone
+ * lookup — NOT `new Date(str).getTime()`, which depends on the host
+ * machine's local timezone and would shift every trip by the UTC offset
+ * (4-5h) on a non-NY host (e.g. a UTC CI runner).
  * We VERIFY this round-trip at the end of the run (see verifyTimezone()):
- * take one emitted trip, compute its epoch, format it back in America/New_York
- * and assert the HH:MM:SS equals the string we wrote. Abort if it drifts.
+ * take one emitted trip, compute its epoch via the same fixed-zone parser,
+ * format it back in America/New_York, and assert the HH:MM:SS equals the
+ * string we wrote. Abort if it drifts.
  * ---------------------------------------------------------------------------
  */
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
 import path from 'path';
+import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
 
 const ETL_DIR = path.join(process.cwd(), 'scripts', 'etl');
 const CSV_GLOB = path.join(ETL_DIR, '202606', '*.csv');
@@ -155,12 +159,14 @@ async function extractSample(con, day) {
 
 /**
  * Round-trip the timezone contract on one real emitted trip:
- * string -> epoch (machine-local parse, as Stage 2 does) -> formatted back in
- * America/New_York. The HH:MM:SS must match the string we wrote.
+ * string -> epoch (fixed America/New_York parse, as Stage 2/4 do) ->
+ * formatted back in America/New_York. The HH:MM:SS must match the string we
+ * wrote. Host-timezone independent — passes identically on a UTC CI runner
+ * or an America/New_York laptop.
  */
 function verifyTimezone(trips) {
     const sample = trips[0];
-    const epoch = new Date(sample.pickup_time).getTime();
+    const epoch = nyWallClockToEpochMs(sample.pickup_time);
     const back = new Date(epoch).toLocaleTimeString('en-US', {
         timeZone: 'America/New_York', hour12: false,
     });
@@ -171,10 +177,10 @@ function verifyTimezone(trips) {
     if (backNorm !== wall) {
         throw new Error(
             `❌ TIMEZONE DRIFT: wrote ${wall} but epoch round-trips to ${backNorm} in America/New_York. ` +
-            `The machine zone is not America/New_York — Stage 2 timestamps would be wrong.`
+            `nyWallClockToEpochMs() is broken — Stage 2/4 timestamps would be wrong.`
         );
     }
-    console.log('   ✅ Zone-less ISO round-trips correctly in America/New_York.');
+    console.log('   ✅ Zone-less ISO parses correctly as America/New_York wall-clock (host-timezone independent).');
 }
 
 async function main() {
