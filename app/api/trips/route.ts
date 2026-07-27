@@ -18,17 +18,30 @@ export async function GET() {
 
   // Use service role key to bypass Row Level Security (server-side only)
   const supabase = createClient(supabaseUrl, serviceKey);
-  const { data, error } = await supabase.from('trips').select('vendor_type, path');
 
-  if (error) {
-    console.error('[/api/trips] Supabase error:', error.message);
-    // Graceful fallback to local file
-    const localTrips = path.join(process.cwd(), 'scripts', 'etl', 'routed_trips.json');
-    if (fs.existsSync(localTrips)) {
-      return NextResponse.json(JSON.parse(fs.readFileSync(localTrips, 'utf8')));
+  // Supabase caps each response at its configured max rows (default 1,000),
+  // so page through with .range() until a short page signals the end.
+  const PAGE_SIZE = 1000;
+  const allTrips: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('trips')
+      .select('vendor_type, path')
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error('[/api/trips] Supabase error:', error.message);
+      // Graceful fallback to local file
+      const localTrips = path.join(process.cwd(), 'scripts', 'etl', 'routed_trips.json');
+      if (fs.existsSync(localTrips)) {
+        return NextResponse.json(JSON.parse(fs.readFileSync(localTrips, 'utf8')));
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+
+    allTrips.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) break;
   }
 
-  return NextResponse.json(data ?? []);
+  return NextResponse.json(allTrips);
 }
