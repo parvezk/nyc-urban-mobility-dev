@@ -7,15 +7,13 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
 
-// OSRM Public Sandbox Endpoint
-const OSRM_BASE = "http://router.project-osrm.org/route/v1/driving";
+// Local OSRM bicycle-profile routing server (Docker). Override with OSRM_BASE env var.
+const OSRM_BASE = process.env.OSRM_BASE || "http://localhost:5000/route/v1/bicycle";
 
 const IN_PATH = path.join(process.cwd(), 'scripts', 'etl', 'output_centroids.json');
 const OUT_PATH = path.join(process.cwd(), 'scripts', 'etl', 'routed_trips.json');
-
-// Extremely simple sleep timer to prevent aggressive DDOSing of the free OSRM tier
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function runRouter() {
     console.log("📍 Loading coordinates from DuckDB ETL step...");
@@ -44,24 +42,27 @@ async function runRouter() {
         const endCoords = `${trip.end.lng},${trip.end.lat}`;
 
         try {
-            // Ping OSRM
+            // Ping local OSRM. NOTE: overview=simplified proved too aggressive for street-level
+            // animation (6 points on a 2km trip = chords cutting through blocks). We fetch the
+            // full geometry and downsample instead — see the filter below for the ratio.
             const res = await fetch(`${OSRM_BASE}/${startCoords};${endCoords}?overview=full&geometries=geojson`);
-            
-            if (res.status === 429) {
-                console.log("⚠️ Hit rate limit... waiting 2 seconds...");
-                await sleep(2000);
-                i--; // retry this trip
-                continue;
-            }
 
             const data = await res.json();
-            
+
             // OSRM returns data.routes[0].geometry.coordinates for successful queries
             if (data.code === "Ok" && data.routes && data.routes.length > 0) {
-                const rawLineString = data.routes[0].geometry.coordinates; // Array of [lng, lat]
+                const fullLineString = data.routes[0].geometry.coordinates; // Array of [lng, lat]
+                // Keep first + last + every 4th point in between (~45m spacing — still hugs
+                // the streets; every-3rd left the 6k-trip payload at 2.46MB gz, over the 2MB SLO)
+                const rawLineString = fullLineString.filter(
+                    (_, idx) => idx === 0 || idx === fullLineString.length - 1 || idx % 4 === 0
+                );
                 
-                const pickupMs = new Date(trip.pickup_time).getTime();
-                const dropoffMs = new Date(trip.dropoff_time).getTime();
+                // Fixed America/New_York parse — NOT `new Date(str)`, which would
+                // parse in the host's local zone and shift every trip by the
+                // UTC offset (4-5h) on a non-NY host (e.g. a UTC CI runner).
+                const pickupMs = nyWallClockToEpochMs(trip.pickup_time);
+                const dropoffMs = nyWallClockToEpochMs(trip.dropoff_time);
                 const diffMs = dropoffMs - pickupMs;
 
                 // Mathematical interpolation across the line string vertices
@@ -70,9 +71,14 @@ async function runRouter() {
                 const deckGlPathArray = rawLineString.map((coord, index) => {
                     // Fractional distribution of timestamp length across array indices
                     const fraction = segmentCount > 1 ? (index / (segmentCount - 1)) : 0;
-                    const calculatedTimestamp = pickupMs + (diffMs * fraction);
-                    
-                    return [coord[0], coord[1], calculatedTimestamp];
+                    // Integer ms — float timestamps bloat the JSON for no visual gain
+                    const calculatedTimestamp = Math.round(pickupMs + (diffMs * fraction));
+
+                    // Round coords to 5 decimals (~1m precision) to shrink payload
+                    const lng = Math.round(coord[0] * 1e5) / 1e5;
+                    const lat = Math.round(coord[1] * 1e5) / 1e5;
+
+                    return [lng, lat, calculatedTimestamp];
                 });
 
                 finalRoutedTrips.push({
@@ -88,14 +94,10 @@ async function runRouter() {
         } catch (err) {
             console.error(`OSRM Request Failed: ${err.message}`);
             failed++;
-            await sleep(1000); // Wait on failure
         }
 
-        // Standard Sleep buffer for the free tier API 
-        await sleep(250); 
-        
         // Progress visualizer
-        if (i > 0 && i % 25 === 0) {
+        if (i > 0 && i % 500 === 0) {
             console.log(`[Progress] Processed ${i}/${trips.length} (Success: ${success}, Dropped: ${failed})`);
         }
     }
@@ -104,7 +106,7 @@ async function runRouter() {
     console.log(`   Successfully Routed: ${success}`);
     console.log(`   Failed/Dropped Routes: ${failed}`);
 
-    fs.writeFileSync(OUT_PATH, JSON.stringify(finalRoutedTrips, null, 2));
+    fs.writeFileSync(OUT_PATH, JSON.stringify(finalRoutedTrips)); // compact — pretty-print tripled the payload
     console.log(`💾 Persisted final Deck.gl arrays to -> ${OUT_PATH}`);
 }
 

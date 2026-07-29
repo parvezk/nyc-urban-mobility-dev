@@ -1,6 +1,13 @@
 # dependencies
 node_modules/
 
+# misc
+movements/
+docs/
+agent-needs.txt
+*.tsbuildinfo
+next-env.d.ts
+
 # next.js build output
 .next/
 out/
@@ -27,13 +34,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# misc
-movements/
-agent-needs.txt
-*.tsbuildinfo
-next-env.d.ts
-
 # ETL Artifacts
 scripts/etl/*.json
 scripts/etl/taxi_zones/
 scripts/etl/taxi_zones.zip
+# large ETL downloads (v1 citibike build)
+scripts/etl/osrm/
+scripts/etl/202606/
