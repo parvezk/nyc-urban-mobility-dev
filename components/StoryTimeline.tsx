@@ -37,6 +37,9 @@ export default function StoryTimeline({
             <p className="text-xs text-slate-400 font-medium tracking-wide">
               Tuesday, Dec 12, 2023 · Manhattan Evening Rush Hour
             </p>
+            <p className="text-[10px] text-slate-500 tracking-wide mt-0.5">
+              Routes are OSRM-estimated bicycle paths, not GPS traces
+            </p>
           </div>
           
           <button 
