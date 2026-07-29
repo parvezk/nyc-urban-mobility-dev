@@ -14,20 +14,11 @@
  *   [{ vendor_type, pickup_time, dropoff_time,
  *      start:{lng,lat}, end:{lng,lat} }]
  *
- * --- TIMEZONE (critical) ---------------------------------------------------
- * The CSV started_at/ended_at strings are New York LOCAL wall-clock time with
- * NO zone suffix (e.g. "2026-06-10 08:05:03.403"). We emit them as zone-less
- * ISO strings ("2026-06-10T08:05:03.403"). Stage 2 and Stage 4 turn these
- * into epochs via `nyWallClockToEpochMs()` (lib/ny-time.mjs), which parses
- * the string as America/New_York wall-clock time using a fixed IANA zone
- * lookup — NOT `new Date(str).getTime()`, which depends on the host
- * machine's local timezone and would shift every trip by the UTC offset
- * (4-5h) on a non-NY host (e.g. a UTC CI runner).
- * We VERIFY this round-trip at the end of the run (see verifyTimezone()):
- * take one emitted trip, compute its epoch via the same fixed-zone parser,
- * format it back in America/New_York, and assert the HH:MM:SS equals the
- * string we wrote. Abort if it drifts.
- * ---------------------------------------------------------------------------
+ * TIMEZONE: CSV times are zone-less NY wall-clock strings (e.g.
+ * "2026-06-10 08:05:03.403"), emitted as-is. Stages 2/4 must convert via
+ * `nyWallClockToEpochMs()` (lib/ny-time.mjs) — a fixed America/New_York zone
+ * lookup, not `new Date(str)`, which shifts by the UTC offset on non-NY
+ * hosts. verifyTimezone() below round-trips one trip to catch drift.
  */
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
