@@ -69,6 +69,9 @@ export default function StoryTimeline({
                 Peak: {dayStats.peakActive} bikes in motion at {formatTime(dayStats.peakEpochMs)}
               </p>
             )}
+            <p className="text-[10px] text-slate-500 tracking-wide mt-0.5">
+              Routes are OSRM-estimated bicycle paths, not GPS traces
+            </p>
           </div>
           
           <button 
