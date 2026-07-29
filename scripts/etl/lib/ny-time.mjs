@@ -19,18 +19,23 @@
 // hours away from any given wall-clock time except in the one-hour window of
 // the transition itself.
 function nyOffsetMsAt(utcMs) {
+    // Intl.DateTimeFormat only resolves whole seconds, but utcMs may carry a
+    // sub-second fraction. Floor to the second before diffing so that
+    // fraction doesn't leak into the offset — otherwise it gets re-added
+    // (doubled) by the caller, which parsed the same fraction from isoStr.
+    const wholeSecUtcMs = Math.floor(utcMs / 1000) * 1000;
     const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/New_York',
         hour12: false,
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit', second: '2-digit',
-    }).formatToParts(new Date(utcMs)).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+    }).formatToParts(new Date(wholeSecUtcMs)).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
 
     const asIfUTC = Date.UTC(
         Number(parts.year), Number(parts.month) - 1, Number(parts.day),
         parts.hour === '24' ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second)
     );
-    return asIfUTC - utcMs;
+    return asIfUTC - wholeSecUtcMs;
 }
 
 export function nyWallClockToEpochMs(isoStr) {
