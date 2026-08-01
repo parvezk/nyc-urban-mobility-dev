@@ -76,7 +76,8 @@ export default function StoryTimeline({
           
           <button 
             onClick={onTogglePlay}
-            className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center border border-slate-600 transition-all shadow-md active:scale-95"
+            aria-label={isPlaying ? "Pause timeline" : "Play timeline"}
+            className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center border border-slate-600 transition-all shadow-md active:scale-95 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           >
             {isPlaying ? (
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
@@ -93,7 +94,8 @@ export default function StoryTimeline({
             max={maxTime}
             value={currentTime}
             onChange={(e) => onTimeChange(Number(e.target.value))}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400 transition-all"
+            aria-label="Timeline scrubber"
+            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           />
         </div>
         
