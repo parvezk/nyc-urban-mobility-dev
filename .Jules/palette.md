@@ -1,0 +1,3 @@
+## 2023-10-27 - Monochromatic UI Focus States & Accents
+**Learning:** In a strict monochromatic design system (where data is the only source of color), standard browser focus states and accent colors (like Tailwind's `accent-blue-500`) violate design constraints, but removing them breaks keyboard accessibility.
+**Action:** Always use specific, high-contrast neutral offset rings (`focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900`) for interactive elements, and use neutral accents (`accent-slate-300`) for sliders to ensure visibility against dark backgrounds without introducing unauthorized colors.
