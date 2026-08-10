@@ -1,0 +1,3 @@
+## 2024-08-09 - Accessible Focus States in Monochromatic UIs
+**Learning:** Standard focus rings get lost against dark backgrounds. Use `focus-visible:ring-offset-slate-900` with `focus-visible:ring-slate-400` for a high-contrast double-border. Also, avoid colored `accent-color` to maintain monochromatic rules; use `accent-slate-300` instead.
+**Action:** Always pair `focus-visible:ring-*` with matching `focus-visible:ring-offset-*` against dark backgrounds to guarantee contrast. Replace any default or colored `accent-*` utilities with neutral tones (e.g., `accent-slate-*`) to maintain monochromatic constraints in inputs like range sliders.
