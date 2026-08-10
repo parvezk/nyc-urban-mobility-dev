@@ -36,7 +36,7 @@ export async function GET() {
       if (fs.existsSync(localTrips)) {
         return NextResponse.json(JSON.parse(fs.readFileSync(localTrips, 'utf8')));
       }
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
     allTrips.push(...(data ?? []));
