@@ -5,10 +5,10 @@ import path from 'path';
 
 export async function GET() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   // Fallback: serve from local file if Supabase is not configured
-  if (!supabaseUrl || !serviceKey) {
+  if (!supabaseUrl || !anonKey) {
     const localTrips = path.join(process.cwd(), 'scripts', 'etl', 'routed_trips.json');
     if (fs.existsSync(localTrips)) {
       return NextResponse.json(JSON.parse(fs.readFileSync(localTrips, 'utf8')));
@@ -16,8 +16,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Supabase unconfigured & local file missing' }, { status: 404 });
   }
 
-  // Use service role key to bypass Row Level Security (server-side only)
-  const supabase = createClient(supabaseUrl, serviceKey);
+  // Use anon key so RLS policies are enforced
+  const supabase = createClient(supabaseUrl, anonKey);
 
   // Supabase caps each response at its configured max rows (default 1,000),
   // so page through with .range() until a short page signals the end.
