@@ -6,7 +6,8 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@deck.gl/core": "^9.0.0",
@@ -27,6 +28,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

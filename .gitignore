@@ -41,3 +41,10 @@ scripts/etl/taxi_zones/
 scripts/etl/taxi_zones.zip
 scripts/etl/osrm/
 scripts/etl/202606/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
