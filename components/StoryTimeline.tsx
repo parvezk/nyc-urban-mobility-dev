@@ -76,7 +76,7 @@ export default function StoryTimeline({
           
           <button 
             onClick={onTogglePlay}
-            aria-label={isPlaying ? "Pause timeline" : "Play timeline"}
+aria-label={isPlaying ? "Pause timeline" : "Play timeline"}
             title={isPlaying ? "Pause timeline" : "Play timeline"}
             className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center border border-slate-600 transition-all shadow-md active:scale-95 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
           >
@@ -95,7 +95,7 @@ export default function StoryTimeline({
             max={maxTime}
             value={currentTime}
             onChange={(e) => onTimeChange(Number(e.target.value))}
-            aria-label="Timeline scrubber"
+aria-label="Timeline scrubber"
             className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-slate-300 hover:accent-slate-200 transition-all focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 focus-visible:outline-none"
           />
         </div>
