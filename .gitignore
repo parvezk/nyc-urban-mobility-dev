@@ -2,8 +2,9 @@
 node_modules/
 
 # misc
+/internal
+scratch
 movements/
-docs/
 agent-needs.txt
 *.tsbuildinfo
 next-env.d.ts
@@ -34,11 +35,10 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ETL Artifacts
+# ETL Artifacts (regenerable — large local downloads & build output)
 scripts/etl/*.json
 scripts/etl/taxi_zones/
 scripts/etl/taxi_zones.zip
-# large ETL downloads (v1 citibike build)
 scripts/etl/osrm/
 scripts/etl/202606/
 
