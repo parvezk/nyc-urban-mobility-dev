@@ -118,10 +118,10 @@ async function run() {
       milestoneId = milestoneRes.projectMilestoneCreate.projectMilestone.id;
     }
 
-    for (const taskName of phase.tasks) {
+    const taskPromises = phase.tasks.map(taskName => {
       console.log(`   Creating Issue: ${taskName}`);
       
-      await linearGraphQL(`
+      return linearGraphQL(`
         mutation CreateIssue($teamId: String!, $projectId: String!, $milestoneId: String!, $title: String!) {
           issueCreate(input: { 
             teamId: $teamId, 
@@ -133,7 +133,8 @@ async function run() {
           }
         }
       `, { teamId, projectId, milestoneId, title: taskName });
-    }
+    });
+    await Promise.all(taskPromises);
   }
 
   console.log("\n✅ All milestones and issues have been successfully populated in Linear!");
