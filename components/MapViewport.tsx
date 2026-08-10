@@ -104,8 +104,13 @@ export default function MapViewport() {
         }
 
         // Find the absolute authentic min and max timestamps
-        const absoluteMin = Math.min(...data.map(d => d.path[0][2]));
-        const absoluteMax = Math.max(...data.map(d => d.path[d.path.length-1][2]));
+        let absoluteMin = Infinity;
+        let absoluteMax = -Infinity;
+        for (let i = 0; i < data.length; i++) {
+          const d = data[i];
+          if (d.path[0][2] < absoluteMin) absoluteMin = d.path[0][2];
+          if (d.path[d.path.length - 1][2] > absoluteMax) absoluteMax = d.path[d.path.length - 1][2];
+        }
 
         setMinTime(absoluteMin);
         setMaxTime(absoluteMax);
