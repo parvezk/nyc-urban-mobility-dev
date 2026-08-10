@@ -1,0 +1,3 @@
+## 2026-08-10 - Explicit Focus Offsets for Monochromatic UIs
+**Learning:** In a monochromatic dark mode design system (like this one using strict slate/gray tones), standard focus rings (e.g., `focus-visible:ring-2`) can easily blend into dark backgrounds or the element itself, harming keyboard accessibility.
+**Action:** Always use explicit offset classes (`focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900`) combined with a neutral, high-contrast ring color (e.g., `focus-visible:ring-slate-400`) to guarantee focus visibility against dark backgrounds without introducing unauthorized colors like blue.
