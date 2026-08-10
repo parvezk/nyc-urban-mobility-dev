@@ -11,7 +11,7 @@ export async function GET() {
   if (!supabaseUrl || !serviceKey) {
     const localTrips = path.join(process.cwd(), 'scripts', 'etl', 'routed_trips.json');
     if (fs.existsSync(localTrips)) {
-      return NextResponse.json(JSON.parse(fs.readFileSync(localTrips, 'utf8')));
+      return NextResponse.json(JSON.parse(await fs.promises.readFile(localTrips, 'utf8')));
     }
     return NextResponse.json({ error: 'Supabase unconfigured & local file missing' }, { status: 404 });
   }
@@ -34,7 +34,7 @@ export async function GET() {
       // Graceful fallback to local file
       const localTrips = path.join(process.cwd(), 'scripts', 'etl', 'routed_trips.json');
       if (fs.existsSync(localTrips)) {
-        return NextResponse.json(JSON.parse(fs.readFileSync(localTrips, 'utf8')));
+        return NextResponse.json(JSON.parse(await fs.promises.readFile(localTrips, 'utf8')));
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
