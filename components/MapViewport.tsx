@@ -335,7 +335,7 @@ export default function MapViewport() {
                 <p className="text-xs text-slate-600 mb-2">{selectedCount} bikes in motion</p>
                 <button
                   onClick={onResetView}
-                  className="w-full py-1.5 bg-slate-900 text-white rounded text-xs hover:bg-slate-800 transition-colors"
+                  className="w-full py-1.5 bg-slate-900 text-white rounded text-xs hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
                 >
                   Reset View
                 </button>

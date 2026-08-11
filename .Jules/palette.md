@@ -1,0 +1,3 @@
+## 2025-03-01 - Monochromatic Focus State Visibility
+**Learning:** In a strict monochromatic UI, standard focus rings (like `ring-blue-500`) break the color constraint, but standard neutral rings (like `ring-slate-400`) can completely blend into dark backgrounds (`bg-slate-900`) making them invisible.
+**Action:** Always use robust offset utilities (`focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900`) alongside neutral rings to guarantee keyboard focus states remain visible without introducing new colors.
