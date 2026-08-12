@@ -1,0 +1,3 @@
+## 2024-03-24 - Monochromatic UI Focus States
+**Learning:** When enforcing strict monochromatic design systems on dark backgrounds, standard focus rings (or default blue accents) often provide insufficient contrast or break the design constraints. Additionally, simple focus rings without offsets can blend into surrounding dark UI elements.
+**Action:** Always use specific neutral offset combinations (e.g., `focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900`) for dark backgrounds, and neutral accents (e.g., `accent-slate-300`) for form inputs to maintain both the visual constraint and clear keyboard accessibility.
