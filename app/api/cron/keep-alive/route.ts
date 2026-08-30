@@ -30,14 +30,11 @@ function cronSecretMatchesAuthorization(request: Request, secret: string): boole
 export async function GET(request: Request) {
   try {
     const cronSecret = process.env.CRON_SECRET?.trim();
-    const userAgent = request.headers.get("user-agent") ?? "";
-    const isVercelCronUserAgent = userAgent.includes("vercel-cron");
-
     // Prefer CRON_SECRET (Vercel injects Authorization: Bearer … on cron invocations). Trim env to avoid stray newlines breaking auth (Vercel KB).
     const authorized =
       cronSecret !== undefined && cronSecret.length > 0
         ? cronSecretMatchesAuthorization(request, cronSecret)
-        : isVercelCronUserAgent;
+        : false;
 
     if (!authorized) {
       console.error("Keep-Alive Cron: Unauthorized (check CRON_SECRET and Vercel production env)");
