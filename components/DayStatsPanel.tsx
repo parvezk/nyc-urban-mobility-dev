@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import type { DayStats } from '@/lib/clip/story';
 import { distanceComparison, formatClock, formatStoryDate } from '@/lib/clip/story';
+import { sunTimes } from '@/lib/lighting/sun';
 
 // The day at a glance: a "shape of the day" line plus the headline numbers.
 // Rows with a time jump the map's clock to that moment.
@@ -51,14 +52,23 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
     return { line, area: `${line} L${SPARK_W} ${SPARK_H} L0 ${SPARK_H} Z`, marks, x, minuteOf };
   }, [curve, stats]);
 
-  const rows: Row[] = [];
+  // Sunrise and sunset for this date sit between the ride moments as chapters.
+  const sun = useMemo(() => sunTimes(stats.date), [stats.date]);
+  const sunEpoch = (h: number | null) => (h === null ? null : sun.midnight + h * 3_600_000);
+  const sunrise = sunEpoch(sun.sunrise);
+  const sunset = sunEpoch(sun.sunset);
+
+  const moments: Row[] = [];
   if (stats.nightLow) {
-    rows.push({ label: 'Quietest minute', value: fmt(stats.nightLow.active), unit: 'bikes', detail: formatClock(stats.nightLow.epochMs), jumpTo: stats.nightLow.epochMs });
+    moments.push({ label: 'Quietest minute', value: fmt(stats.nightLow.active), unit: 'bikes', detail: formatClock(stats.nightLow.epochMs), jumpTo: stats.nightLow.epochMs });
   }
+  if (sunrise !== null) moments.push({ label: 'Sunrise', value: formatClock(sunrise), jumpTo: sunrise });
   if (stats.morningPeak) {
-    rows.push({ label: 'Morning peak', value: fmt(stats.morningPeak.active), detail: formatClock(stats.morningPeak.epochMs), jumpTo: stats.morningPeak.epochMs });
+    moments.push({ label: 'Morning peak', value: fmt(stats.morningPeak.active), detail: formatClock(stats.morningPeak.epochMs), jumpTo: stats.morningPeak.epochMs });
   }
-  rows.push({ label: 'Day peak', value: fmt(stats.peakActive), detail: formatClock(stats.peakEpochMs), jumpTo: stats.peakEpochMs });
+  moments.push({ label: 'Day peak', value: fmt(stats.peakActive), detail: formatClock(stats.peakEpochMs), jumpTo: stats.peakEpochMs });
+  if (sunset !== null) moments.push({ label: 'Sunset', value: formatClock(sunset), jumpTo: sunset });
+  const rows: Row[] = moments.sort((a, b) => (a.jumpTo ?? 0) - (b.jumpTo ?? 0));
   rows.push({ label: 'Rides', value: fmt(stats.totalTrips) });
   if (stats.straightLineKm) {
     rows.push({
@@ -111,6 +121,15 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
                 aria-label="Bikes in motion from 3 AM to midnight"
                 className="block w-full h-auto overflow-visible"
               >
+                {sunrise !== null && sunset !== null && (
+                  <rect
+                    x={spark.x(spark.minuteOf(sunrise))}
+                    y={-4}
+                    width={Math.max(0, spark.x(spark.minuteOf(sunset)) - spark.x(spark.minuteOf(sunrise)))}
+                    height={SPARK_H + 4}
+                    fill="rgba(245,165,36,0.10)"
+                  />
+                )}
                 <path d={spark.area} fill="rgba(58,85,224,0.14)" />
                 <path d={spark.line} fill="none" stroke="#3A55E0" strokeWidth={1.6} strokeLinejoin="round" />
                 <line x1={nowX} x2={nowX} y1={-4} y2={SPARK_H} stroke="rgba(15,23,42,0.55)" strokeWidth={1} />

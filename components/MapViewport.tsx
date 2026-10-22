@@ -9,6 +9,8 @@ import { FlyToInterpolator } from '@deck.gl/core';
 import StoryTimeline, { DayStats } from './StoryTimeline';
 import DayStatsPanel from './DayStatsPanel';
 import ViewControls from './ViewControls';
+import PlacesPanel from './PlacesPanel';
+import { hourOf, hourRange, loadPlaces, type Place } from '@/lib/places';
 import { DaysIndex, DaySources, loadDaysIndex, resolveDayFrom } from '@/lib/dayData';
 import { matchesFilters, useViewStore } from '@/lib/store/viewStore';
 import { MAP_STYLE, applySunLook, prepareMap, tripColorsAt } from '@/lib/lighting/mapLook';
@@ -85,6 +87,8 @@ export default function MapViewport() {
   // Every ride of the day, streamed in hourly chunks (null = not published; use the sample).
   const [ridesManifest, setRidesManifest] = useState<RidesManifest | null>(null);
   const [rideChunks, setRideChunks] = useState<RideChunk[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   // Ensure we only auto-jump to the mid-rush opening time once.
   const didInitTime = useRef(false);
@@ -144,6 +148,9 @@ export default function MapViewport() {
 
     setRidesManifest(null);
     setRideChunks([]);
+    setPlaces([]);
+    setSelectedPlace(null);
+    if (sources.date) loadPlaces(sources.date).then(p => { if (!cancelled) setPlaces(p); });
 
     const loadSample = () => fetch(sources.tripsUrl)
       .then(res => res.json())
@@ -283,7 +290,23 @@ export default function MapViewport() {
     setSelectedCluster(cluster);
   }, []);
 
+  const onSelectPlace = useCallback((place: Place) => {
+    setSelectedCluster(null);
+    setSelectedPlace(place);
+    setViewState(vs => ({
+      ...vs,
+      longitude: place.lng,
+      latitude: place.lat,
+      zoom: 16,
+      pitch: 55,
+      bearing: 20,
+      transitionDuration: 2200,
+      transitionInterpolator: new FlyToInterpolator()
+    } as any));
+  }, []);
+
   const onResetView = useCallback(() => {
+    setSelectedPlace(null);
     setViewState({
       ...INITIAL_VIEW_STATE,
       transitionDuration: 2000,
@@ -370,6 +393,18 @@ export default function MapViewport() {
   const lightStep = Math.round(time / 300_000);
   const tripLook = useMemo(() => tripColorsAt(daylightAt(lightStep * 300_000)), [lightStep]);
 
+  // Places: which local hour the clock is in, and whether it is the spot's peak.
+  const localHour = dayStart !== null ? Math.floor((time - dayStart) / 3_600_000) : -1;
+  const placeIsBusiest = !!selectedPlace && localHour === selectedPlace.busiestHour.hour;
+  const placeNow = selectedPlace ? hourOf(selectedPlace, localHour) : null;
+  const jumpToHour = (hour: number) => {
+    if (dayStart === null) return;
+    setTime(Math.max(minTime, Math.min(maxTime, dayStart + (hour + 0.25) * 3_600_000)));
+  };
+  const shownDateLabel = shownDate
+    ? new Date(`${shownDate}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+    : '';
+
   // Glow where rides overlap after dark; plain blending on the light day map.
   const tripBlend = tripLook.additive
     ? { blend: true, blendColorOperation: 'add', blendColorSrcFactor: 'src-alpha', blendColorDstFactor: 'one', blendAlphaOperation: 'add', blendAlphaSrcFactor: 'one', blendAlphaDstFactor: 'one-minus-src-alpha', depthWriteEnabled: false }
@@ -431,6 +466,20 @@ export default function MapViewport() {
 
   const layers = [
     ...tripLayers,
+    new ScatterplotLayer<Place>({
+      id: 'place-ring',
+      data: selectedPlace ? [selectedPlace] : [],
+      getPosition: (d: Place) => [d.lng, d.lat],
+      getRadius: (d: Place) => d.radiusM + (placeIsBusiest ? pingRadius * 0.15 : 0),
+      radiusUnits: 'meters',
+      stroked: true,
+      filled: true,
+      getFillColor: placeIsBusiest ? [245, 165, 36, 46] : [15, 23, 42, 18],
+      getLineColor: placeIsBusiest ? [245, 165, 36, 230] : tripLook.additive ? [230, 236, 248, 200] : [15, 23, 42, 160],
+      lineWidthMinPixels: placeIsBusiest ? 3 : 1.5,
+      parameters: { depthWriteEnabled: false } as any,
+      updateTriggers: { getRadius: [pingRadius, placeIsBusiest], getFillColor: placeIsBusiest, getLineColor: [placeIsBusiest, tripLook.additive] }
+    }),
     new ScatterplotLayer<PulseDatum>({
       id: 'hotspot-pulses',
       data: activePulses,
@@ -493,6 +542,48 @@ export default function MapViewport() {
               </div>
             </Popup>
           )}
+          {selectedPlace && placeNow && (
+            <Popup
+              longitude={selectedPlace.lng}
+              latitude={selectedPlace.lat}
+              anchor="bottom"
+              offset={24}
+              closeButton={true}
+              closeOnClick={false}
+              onClose={() => setSelectedPlace(null)}
+              className="z-50"
+            >
+              <div className="text-slate-900 flex flex-col gap-1.5 p-1 min-w-[220px]">
+                <h3 className="font-bold text-base leading-tight">{selectedPlace.name}</h3>
+                {placeIsBusiest ? (
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
+                    Busiest hour here · {shownDateLabel}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-500">Within {selectedPlace.radiusM} m · {hourRange(Math.max(0, localHour))}</p>
+                )}
+                <p className="text-sm tabular-nums">
+                  <span className="font-bold">{placeNow.electric.toLocaleString('en-US')}</span> e-bikes ·{' '}
+                  <span className="font-bold">{placeNow.classic.toLocaleString('en-US')}</span> classic
+                  {placeIsBusiest && <span className="text-slate-500"> ({hourRange(localHour)})</span>}
+                </p>
+                {!placeIsBusiest && (
+                  <button
+                    onClick={() => { jumpToHour(selectedPlace.busiestHour.hour); setIsPlaying(false); }}
+                    className="mt-1 w-full py-1.5 bg-slate-900 text-white rounded text-xs hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                  >
+                    Jump to busiest hour ({hourRange(selectedPlace.busiestHour.hour)})
+                  </button>
+                )}
+                <button
+                  onClick={onResetView}
+                  className="w-full py-1.5 bg-black/5 text-slate-700 rounded text-xs hover:bg-black/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                >
+                  Back to the city
+                </button>
+              </div>
+            </Popup>
+          )}
         </MapGL>
       </DeckGL>
 
@@ -506,6 +597,8 @@ export default function MapViewport() {
           }}
         />
       )}
+
+      <PlacesPanel places={places} selectedId={selectedPlace?.id ?? null} onSelect={onSelectPlace} />
 
       <ViewControls
         index={daysIndex ?? null}
