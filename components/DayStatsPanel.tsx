@@ -3,9 +3,11 @@
 import React, { useMemo, useState } from 'react';
 import type { DayStats } from '@/lib/clip/story';
 import { distanceComparison, formatClock, formatStoryDate } from '@/lib/clip/story';
+import { sunTimes } from '@/lib/lighting/sun';
 
-// The day at a glance: a "shape of the day" line plus the headline numbers.
-// Rows with a time jump the map's clock to that moment.
+// Field guide to the day: a "shape of the day" line, the day's chapters
+// (click one to jump the clock there; the current one is highlighted as the
+// day plays), then the headline numbers.
 
 const SPARK_W = 276;
 const SPARK_H = 48;
@@ -24,7 +26,12 @@ interface Row {
   value: string;
   unit?: string;    // follows the value: "58 bikes"
   detail?: string;  // after a dot: "· 3:43 AM"
-  jumpTo?: number;
+}
+
+interface Chapter {
+  title: string;
+  caption?: string;
+  at: number;       // epoch ms
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
@@ -51,14 +58,28 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
     return { line, area: `${line} L${SPARK_W} ${SPARK_H} L0 ${SPARK_H} Z`, marks, x, minuteOf };
   }, [curve, stats]);
 
-  const rows: Row[] = [];
+  // Sunrise and sunset for this date sit between the ride moments as chapters.
+  const sun = useMemo(() => sunTimes(stats.date), [stats.date]);
+  const sunEpoch = (h: number | null) => (h === null ? null : sun.midnight + h * 3_600_000);
+  const sunrise = sunEpoch(sun.sunrise);
+  const sunset = sunEpoch(sun.sunset);
+
+  const chapters: Chapter[] = [];
   if (stats.nightLow) {
-    rows.push({ label: 'Quietest minute', value: fmt(stats.nightLow.active), unit: 'bikes', detail: formatClock(stats.nightLow.epochMs), jumpTo: stats.nightLow.epochMs });
+    chapters.push({ title: 'Quietest minute', caption: `${fmt(stats.nightLow.active)} bikes moving. The city is asleep.`, at: stats.nightLow.epochMs });
   }
+  if (sunrise !== null) chapters.push({ title: 'Sunrise', caption: 'New York starts to wake up.', at: sunrise });
   if (stats.morningPeak) {
-    rows.push({ label: 'Morning peak', value: fmt(stats.morningPeak.active), detail: formatClock(stats.morningPeak.epochMs), jumpTo: stats.morningPeak.epochMs });
+    chapters.push({ title: 'Morning peak', caption: `${fmt(stats.morningPeak.active)} bikes moving. Morning rush.`, at: stats.morningPeak.epochMs });
   }
-  rows.push({ label: 'Day peak', value: fmt(stats.peakActive), detail: formatClock(stats.peakEpochMs), jumpTo: stats.peakEpochMs });
+  chapters.push({ title: 'Day peak', caption: `${fmt(stats.peakActive)} bikes at once, the most all day.`, at: stats.peakEpochMs });
+  if (sunset !== null) chapters.push({ title: 'Sunset', at: sunset });
+  chapters.sort((x, y) => x.at - y.at);
+  // The chapter the clock is in: the last one it has passed.
+  let current = -1;
+  chapters.forEach((c, i) => { if (currentTime >= c.at) current = i; });
+
+  const rows: Row[] = [];
   rows.push({ label: 'Rides', value: fmt(stats.totalTrips) });
   if (stats.straightLineKm) {
     rows.push({
@@ -83,17 +104,17 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
   return (
     <section
       aria-label="One day of Citi Bike, at a glance"
-      className="absolute top-4 left-4 z-50 w-[320px] max-w-[calc(100vw-2rem)] bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl text-white"
+      className="absolute top-4 left-4 z-50 w-[320px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-7rem)] overflow-y-auto bg-[#FAFAF8]/90 backdrop-blur-xl border border-black/5 rounded-2xl shadow-[0_10px_40px_rgba(20,22,30,0.14)] text-slate-900"
     >
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
         <div>
-          <h1 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">One day of Citi Bike</h1>
+          <h1 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">One day of Citi Bike · Manhattan</h1>
           <p className="text-lg font-bold leading-tight mt-1">{formatStoryDate(stats.date)}</p>
         </div>
         <button
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="shrink-0 h-8 px-3 rounded-full bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="shrink-0 h-8 px-3 rounded-full bg-black/5 hover:bg-black/10 text-xs font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
         >
           {open ? 'Hide' : 'Stats'}
         </button>
@@ -111,14 +132,23 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
                 aria-label="Bikes in motion from 3 AM to midnight"
                 className="block w-full h-auto overflow-visible"
               >
-                <path d={spark.area} fill="rgba(255,166,72,0.16)" />
-                <path d={spark.line} fill="none" stroke="#FFA648" strokeWidth={1.6} strokeLinejoin="round" />
-                <line x1={nowX} x2={nowX} y1={-4} y2={SPARK_H} stroke="rgba(255,255,255,0.55)" strokeWidth={1} />
+                {sunrise !== null && sunset !== null && (
+                  <rect
+                    x={spark.x(spark.minuteOf(sunrise))}
+                    y={-4}
+                    width={Math.max(0, spark.x(spark.minuteOf(sunset)) - spark.x(spark.minuteOf(sunrise)))}
+                    height={SPARK_H + 4}
+                    fill="rgba(245,165,36,0.10)"
+                  />
+                )}
+                <path d={spark.area} fill="rgba(58,85,224,0.14)" />
+                <path d={spark.line} fill="none" stroke="#3A55E0" strokeWidth={1.6} strokeLinejoin="round" />
+                <line x1={nowX} x2={nowX} y1={-4} y2={SPARK_H} stroke="rgba(15,23,42,0.55)" strokeWidth={1} />
                 {spark.marks.map((m, i) => (
-                  <circle key={i} cx={m.cx} cy={m.cy} r={3} fill="#ffffff" />
+                  <circle key={i} cx={m.cx} cy={m.cy} r={3} fill="#0f172a" />
                 ))}
               </svg>
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
                 <span>3 AM</span>
                 <span>Noon</span>
                 <span>Midnight</span>
@@ -126,33 +156,45 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
             </div>
           )}
 
-          <div className="text-[13px]">
-            {rows.map(r => {
-              const content = (
-                <>
-                  <span className="text-slate-400">{r.label}</span>
-                  <span className="text-right">
-                    <span className="font-bold tabular-nums text-white">{r.value}</span>
-                    {r.unit && <span className="text-slate-300"> {r.unit}</span>}
-                    {r.detail && <span className="text-slate-300"> · {r.detail}</span>}
-                  </span>
-                </>
-              );
-              return r.jumpTo !== undefined ? (
-                <button
-                  key={r.label}
-                  onClick={() => onJump(r.jumpTo as number)}
-                  title={`Jump to ${formatClock(r.jumpTo)}`}
-                  className="w-full flex justify-between items-baseline gap-3 py-1.5 border-t border-white/5 text-left hover:bg-white/5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                >
-                  {content}
-                </button>
-              ) : (
-                <div key={r.label} className="flex justify-between items-baseline gap-3 py-1.5 border-t border-white/5">
-                  {content}
-                </div>
+          <ol aria-label="Chapters of the day" className="mb-3">
+            {chapters.map((c, i) => {
+              const active = i === current;
+              return (
+                <li key={c.title}>
+                  <button
+                    onClick={() => onJump(c.at)}
+                    aria-current={active ? 'step' : undefined}
+                    title={`Jump to ${formatClock(c.at)}`}
+                    className={`group w-full grid grid-cols-[64px_1fr] gap-x-3 rounded-lg px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+                      active ? 'bg-slate-900 text-white' : 'hover:bg-black/5'
+                    }`}
+                  >
+                    <span className={`text-[12px] font-semibold tabular-nums pt-px ${active ? 'text-white/80' : 'text-slate-500'}`}>
+                      {formatClock(c.at)}
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-semibold leading-snug">{c.title}</span>
+                      {c.caption && (
+                        <span className={`block text-[12px] leading-snug ${active ? 'text-white/75' : 'text-slate-600'}`}>{c.caption}</span>
+                      )}
+                    </span>
+                  </button>
+                </li>
               );
             })}
+          </ol>
+
+          <div className="text-[13px]">
+            {rows.map(r => (
+              <div key={r.label} className="flex justify-between items-baseline gap-3 py-1.5 border-t border-black/5">
+                <span className="text-slate-500">{r.label}</span>
+                <span className="text-right">
+                  <span className="font-bold tabular-nums text-slate-900">{r.value}</span>
+                  {r.unit && <span className="text-slate-600"> {r.unit}</span>}
+                  {r.detail && <span className="text-slate-600"> · {r.detail}</span>}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

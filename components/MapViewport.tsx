@@ -3,26 +3,44 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import DeckGL from '@deck.gl/react';
 import { TripsLayer } from '@deck.gl/geo-layers';
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
-import MapGL, { Popup } from 'react-map-gl/maplibre';
+import { ScatterplotLayer } from '@deck.gl/layers';
+import MapGL, { Popup, type MapRef } from 'react-map-gl/maplibre';
 import { FlyToInterpolator } from '@deck.gl/core';
 import StoryTimeline, { DayStats } from './StoryTimeline';
 import DayStatsPanel from './DayStatsPanel';
-import ViewControls, { CLASSIC_RGB, EBIKE_RGB } from './ViewControls';
+import ViewControls from './ViewControls';
+import PlacesPanel from './PlacesPanel';
+import { hourOf, hourRange, loadPlaces, type Place } from '@/lib/places';
 import { DaysIndex, DaySources, loadDaysIndex, resolveDayFrom } from '@/lib/dayData';
 import { matchesFilters, useViewStore } from '@/lib/store/viewStore';
+import { MAP_STYLE, applySunLook, prepareMap, tripColorsAt } from '@/lib/lighting/mapLook';
+import { daylightAt, nyMidnight } from '@/lib/lighting/sun';
+import { GROUP_KEYS, loadChunk, loadManifest, loadOrder, type GroupKey, type RideChunk, type RidesManifest } from '@/lib/rides/cbr1';
+import { MANHATTAN_FOCUS, MANHATTAN_MIN_ZOOM, MANHATTAN_VIEW_BOUNDS, rideTouchesManhattan } from '@/lib/geo/manhattan';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
+// Manhattan laid left to right (bearing -61 turns the street grid level).
 const INITIAL_VIEW_STATE = {
-  longitude: -74.0,
-  latitude: 40.72,
-  zoom: 12,
-  pitch: 60,
-  bearing: 0
+  longitude: -73.982,
+  latitude: 40.758,
+  zoom: 12.2,
+  pitch: 45,
+  bearing: -61
 };
 
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+// Keep the camera on Manhattan: no panning off to the other boroughs.
+const B = MANHATTAN_VIEW_BOUNDS;
+const clampView = <T extends { longitude: number; latitude: number; zoom: number }>(v: T): T => ({
+  ...v,
+  longitude: Math.min(B.maxLng, Math.max(B.minLng, v.longitude)),
+  latitude: Math.min(B.maxLat, Math.max(B.minLat, v.latitude)),
+  zoom: Math.max(MANHATTAN_MIN_ZOOM, v.zoom),
+});
+
+// The red activity pulses are parked until they get a legend and keep pace
+// with the timeline.
+const SHOW_HOTSPOTS = false;
 
 // A single animated trip path: [lng, lat, epochMs] waypoints.
 interface TripPath {
@@ -78,10 +96,14 @@ export default function MapViewport() {
   // The hotspot cluster the user has clicked into (drives Popup + fly-to).
   const [selectedCluster, setSelectedCluster] = useState<PulseDatum | null>(null);
 
-  const [buildings, setBuildings] = useState<any[]>([]);
   const [trips, setTrips] = useState<TripPath[]>([]);
   const [hotspots, setHotspots] = useState<HotspotsData | null>(null);
   const [dayStats, setDayStats] = useState<DayStats | null>(null);
+  // Every ride of the day, streamed in hourly chunks (null = not published; use the sample).
+  const [ridesManifest, setRidesManifest] = useState<RidesManifest | null>(null);
+  const [rideChunks, setRideChunks] = useState<RideChunk[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   // Ensure we only auto-jump to the mid-rush opening time once.
   const didInitTime = useRef(false);
@@ -101,10 +123,6 @@ export default function MapViewport() {
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('day');
     if (requested) setDay(requested);
-
-    fetch('/data/buildings.json')
-      .then(res => res.json())
-      .then(data => setBuildings(data));
 
     loadDaysIndex().then(setDaysIndex);
   }, [setDay]);
@@ -143,14 +161,28 @@ export default function MapViewport() {
       .then(res => res.json())
       .then((data: DayStats) => { if (!cancelled) setDayStats(data); });
 
-    fetch(sources.tripsUrl)
+    setRidesManifest(null);
+    setRideChunks([]);
+    setPlaces([]);
+    setSelectedPlace(null);
+    if (sources.date) loadPlaces(sources.date).then(p => { if (!cancelled) setPlaces(p); });
+
+    const loadSample = () => fetch(sources.tripsUrl)
       .then(res => res.json())
-      .then((data: TripPath[]) => {
+      .then((loaded: TripPath[]) => {
         if (cancelled) return;
+        let data = loaded;
         if (!Array.isArray(data) || data.length === 0) {
           console.warn('Trips file returned invalid data or empty set:', data);
           return;
         }
+        // Manhattan only: rides that start or end on the island.
+        data = data.filter(d => {
+          const a = d.path[0];
+          const b = d.path[d.path.length - 1];
+          return rideTouchesManhattan(a[0], a[1], b[0], b[1]);
+        });
+        if (data.length === 0) return;
 
         // Find the absolute authentic min and max timestamps
         let absoluteMin = Infinity;
@@ -169,6 +201,29 @@ export default function MapViewport() {
         setTrips(data);
       });
 
+    // Prefer every ride when the pipeline has published them; otherwise the sample.
+    const date = sources.date;
+    (date ? loadManifest(date) : Promise.resolve(null)).then(async manifest => {
+      if (cancelled) return;
+      if (!manifest || !date) { loadSample(); return; }
+      setRidesManifest(manifest);
+      setMinTime(manifest.dayStartEpochMs);
+      setMaxTime(manifest.dayStartEpochMs + 24.5 * 3_600_000);
+      if (!didInitTime.current) setTime(manifest.dayStartEpochMs);
+      // Open on 8 AM, so load from 7 AM forward, then wrap around.
+      for (const hour of loadOrder(7)) {
+        if (cancelled) return;
+        if (!manifest.hours.some(h => h.hour === hour && h.rides > 0)) continue;
+        try {
+          // Files the ETL already scoped to Manhattan need no filtering here.
+          const chunk = await loadChunk(date, hour, manifest.scope === 'manhattan' ? undefined : rideTouchesManhattan);
+          if (!cancelled) setRideChunks(prev => [...prev, chunk]);
+        } catch (err) {
+          console.warn(err);
+        }
+      }
+    });
+
     return () => { cancelled = true; };
   }, [sources]);
 
@@ -177,7 +232,25 @@ export default function MapViewport() {
     () => (bike === 'all' && rider === 'all' ? trips : trips.filter(t => matchesFilters(t, bike, rider))),
     [trips, bike, rider]
   );
-  const hasRiderData = useMemo(() => trips.some(t => typeof t.member === 'boolean'), [trips]);
+  const hasRiderData = useMemo(
+    () => ridesManifest !== null || trips.some(t => typeof t.member === 'boolean'),
+    [trips, ridesManifest]
+  );
+  const groupVisible = useCallback((g: GroupKey) => {
+    const [b, r] = g.split('-');
+    if (bike === 'electric' && b !== 'ebike') return false;
+    if (bike === 'classic' && b !== 'classic') return false;
+    if (rider !== 'all' && r !== rider) return false;
+    return true;
+  }, [bike, rider]);
+  const rideCounts = useMemo(() => {
+    let shown = 0;
+    for (const c of rideChunks) for (const g of GROUP_KEYS) if (groupVisible(g)) shown += c.groups[g].length;
+    if (!ridesManifest) return { shown, total: 0 };
+    if (ridesManifest.scope === 'manhattan') return { shown, total: ridesManifest.totalRides };
+    // Filtered here: the total is what has loaded so far.
+    return { shown, total: rideChunks.reduce((n, c) => n + c.rides, 0) };
+  }, [rideChunks, groupVisible, ridesManifest]);
 
   // 1c. Open mid-rush: once both trips and day-stats have loaded, jump the clock
   // to 08:00 AM (America/New_York) of the story's date, clamped to the trip range.
@@ -244,7 +317,23 @@ export default function MapViewport() {
     setSelectedCluster(cluster);
   }, []);
 
+  const onSelectPlace = useCallback((place: Place) => {
+    setSelectedCluster(null);
+    setSelectedPlace(place);
+    setViewState(vs => ({
+      ...vs,
+      longitude: place.lng,
+      latitude: place.lat,
+      zoom: 16,
+      pitch: 55,
+      bearing: 20,
+      transitionDuration: 2200,
+      transitionInterpolator: new FlyToInterpolator()
+    } as any));
+  }, []);
+
   const onResetView = useCallback(() => {
+    setSelectedPlace(null);
     setViewState({
       ...INITIAL_VIEW_STATE,
       transitionDuration: 2000,
@@ -316,35 +405,124 @@ export default function MapViewport() {
     return cluster?.counts.get(currentBucketEpoch) ?? 0;
   }, [selectedCluster, hotspotLookup, currentBucketEpoch]);
 
+  // 5. Sun-driven look: the basemap, 3D buildings and trip colours follow the
+  // real sun for the shown date. Lit windows switch on after dark.
+  const mapRef = useRef<MapRef>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const shownDate = sources?.date ?? dayStats?.date ?? null;
+  const dayStart = useMemo(() => (shownDate ? nyMidnight(shownDate) : null), [shownDate]);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!mapReady || !map || dayStart === null || time === 0) return;
+    applySunLook(map, time, (time - dayStart) / 3_600_000);
+  }, [mapReady, time, dayStart]);
+  // Quantised so trip colours only re-upload when the light visibly changes.
+  const lightStep = Math.round(time / 300_000);
+  const tripLook = useMemo(() => tripColorsAt(daylightAt(lightStep * 300_000)), [lightStep]);
+
+  // Places: which local hour the clock is in, and whether it is the spot's peak.
+  const localHour = dayStart !== null ? Math.floor((time - dayStart) / 3_600_000) : -1;
+  const placeIsBusiest = !!selectedPlace && localHour === selectedPlace.busiestHour.hour;
+  const placeNow = selectedPlace ? hourOf(selectedPlace, localHour) : null;
+  const jumpToHour = (hour: number) => {
+    if (dayStart === null) return;
+    setTime(Math.max(minTime, Math.min(maxTime, dayStart + (hour + 0.25) * 3_600_000)));
+  };
+  const shownDateLabel = shownDate
+    ? new Date(`${shownDate}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+    : '';
+
+  // Glow where rides overlap after dark; plain blending on the light day map.
+  const tripBlend = useMemo(() => (tripLook.additive
+    ? { blend: true, blendColorOperation: 'add', blendColorSrcFactor: 'src-alpha', blendColorDstFactor: 'one', blendAlphaOperation: 'add', blendAlphaSrcFactor: 'one', blendAlphaDstFactor: 'one-minus-src-alpha', depthWriteEnabled: false }
+    : { depthWriteEnabled: false }), [tripLook.additive]);
+
+  // Binary path data for each chunk and group. Built once per chunk so deck.gl
+  // sees the same object every frame and never re-processes the vertices.
+  const rideData = useMemo(() => {
+    const out = new Map<string, unknown>();
+    for (const chunk of rideChunks) {
+      for (const g of GROUP_KEYS) {
+        const G = chunk.groups[g];
+        if (G.length === 0) continue;
+        out.set(`${chunk.hour}-${g}`, {
+          length: G.length,
+          startIndices: G.startIndices,
+          attributes: {
+            getPath: { value: G.positions, size: 2 },
+            getTimestamps: { value: G.timestamps, size: 1 },
+          },
+        });
+      }
+    }
+    return out;
+  }, [rideChunks]);
+
+  // Every ride: one thin layer per (start hour x bike x rider) group. Only
+  // chunks whose rides can be on the road right now are drawn.
+  const TRAIL_SEC = 480;
+  const nowSec = ridesManifest ? (time - ridesManifest.dayStartEpochMs) / 1000 : 0;
+  const tripLayers: any[] = ridesManifest
+    ? rideChunks.flatMap(chunk => {
+        // Only chunks whose rides can be on the road right now get a layer;
+        // the rest hold no GPU memory until the clock reaches them.
+        const onRoad = nowSec >= chunk.hour * 3600 - 60 && nowSec <= chunk.endSec + TRAIL_SEC;
+        if (!onRoad) return [];
+        return GROUP_KEYS.filter(g => chunk.groups[g].length > 0 && groupVisible(g)).map(g =>
+          new TripsLayer({
+            id: `rides-${chunk.hour}-${g}`,
+            data: rideData.get(`${chunk.hour}-${g}`) as any,
+            _pathType: 'open',
+            getColor: g.startsWith('ebike') ? tripLook.ebike : tripLook.classic,
+            opacity: tripLook.additive ? 0.55 : 0.6,
+            widthUnits: 'pixels',
+            getWidth: 1,
+            widthMinPixels: 1,
+            parameters: tripBlend as any,
+            fadeTrail: true,
+            trailLength: TRAIL_SEC,
+            currentTime: nowSec,
+          })
+        );
+      })
+    : [
+        new TripsLayer({
+          id: 'trips',
+          data: visibleTrips,
+          // getPath must return [lng, lat] pairs ONLY — no timestamps
+          getPath: (d: any) => d.path.map((pt: any) => [pt[0], pt[1]]),
+          // getTimestamps returns the 3rd element (the epoch ms) from each waypoint
+          getTimestamps: (d: any) => d.path.map((pt: any) => pt[2]),
+          getColor: (d: any) => (d.vendor_type === 'electric_bike' ? tripLook.ebike : tripLook.classic),
+          opacity: 0.85,
+          widthMinPixels: 2.5,
+          parameters: tripBlend as any,
+          updateTriggers: { getColor: [tripLook.ebike, tripLook.classic] },
+          jointRounded: true,
+          capRounded: true,
+          fadeTrail: true,
+          trailLength: 600000, // 10-minute trail in ms
+          currentTime: time
+        })
+      ];
+
   const layers = [
-    new PolygonLayer({
-      id: 'buildings',
-      data: buildings,
-      extruded: true,
-      wireframe: false,
-      opacity: 0.5,
-      getPolygon: (f: any) => f.polygon,
-      getElevation: (f: any) => f.height,
-      getFillColor: [74, 80, 87]
+    ...tripLayers,
+    new ScatterplotLayer<Place>({
+      id: 'place-ring',
+      data: selectedPlace ? [selectedPlace] : [],
+      getPosition: (d: Place) => [d.lng, d.lat],
+      getRadius: (d: Place) => d.radiusM + (placeIsBusiest ? pingRadius * 0.15 : 0),
+      radiusUnits: 'meters',
+      stroked: true,
+      filled: true,
+      getFillColor: placeIsBusiest ? [245, 165, 36, 46] : [15, 23, 42, 18],
+      getLineColor: placeIsBusiest ? [245, 165, 36, 230] : tripLook.additive ? [230, 236, 248, 200] : [15, 23, 42, 160],
+      lineWidthMinPixels: placeIsBusiest ? 3 : 1.5,
+      parameters: { depthWriteEnabled: false } as any,
+      updateTriggers: { getRadius: [pingRadius, placeIsBusiest], getFillColor: placeIsBusiest, getLineColor: [placeIsBusiest, tripLook.additive] }
     }),
-    new TripsLayer({
-      id: 'trips',
-      data: visibleTrips,
-      // getPath must return [lng, lat] pairs ONLY — no timestamps
-      getPath: (d: any) => d.path.map((pt: any) => [pt[0], pt[1]]),
-      // getTimestamps returns the 3rd element (the epoch ms) from each waypoint
-      getTimestamps: (d: any) => d.path.map((pt: any) => pt[2]),
-      // electric_bike -> teal; classic_bike (and any other value) -> orange
-      getColor: (d: any) => (d.vendor_type === 'electric_bike' ? EBIKE_RGB : CLASSIC_RGB),
-      opacity: 0.8,
-      widthMinPixels: 3,
-      jointRounded: true,
-      capRounded: true,
-      fadeTrail: true,
-      trailLength: 600000, // 10-minute trail in ms
-      currentTime: time
-    }),
-    new ScatterplotLayer<PulseDatum>({
+    SHOW_HOTSPOTS && new ScatterplotLayer<PulseDatum>({
       id: 'hotspot-pulses',
       data: activePulses,
       getPosition: (d: PulseDatum) => [d.lng, d.lat],
@@ -371,13 +549,17 @@ export default function MapViewport() {
     <div className="relative w-full h-screen overflow-hidden">
       <DeckGL
         viewState={viewState}
-        onViewStateChange={e => setViewState(e.viewState as any)}
+        onViewStateChange={e => setViewState(clampView(e.viewState as any))}
         controller={true}
         layers={layers}
         pickingRadius={20}
       >
-        <MapGL mapStyle={MAP_STYLE}>
-          {selectedCluster && (
+        <MapGL
+          ref={mapRef}
+          mapStyle={MAP_STYLE}
+          onLoad={e => { prepareMap(e.target, MANHATTAN_FOCUS); setMapReady(true); }}
+        >
+          {SHOW_HOTSPOTS && selectedCluster && (
             <Popup
               longitude={selectedCluster.lng}
               latitude={selectedCluster.lat}
@@ -402,6 +584,48 @@ export default function MapViewport() {
               </div>
             </Popup>
           )}
+          {selectedPlace && placeNow && (
+            <Popup
+              longitude={selectedPlace.lng}
+              latitude={selectedPlace.lat}
+              anchor="bottom"
+              offset={24}
+              closeButton={true}
+              closeOnClick={false}
+              onClose={() => setSelectedPlace(null)}
+              className="z-50"
+            >
+              <div className="text-slate-900 flex flex-col gap-1.5 p-1 min-w-[220px]">
+                <h3 className="font-bold text-base leading-tight">{selectedPlace.name}</h3>
+                {placeIsBusiest ? (
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">
+                    Busiest hour here · {shownDateLabel}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-500">Within {selectedPlace.radiusM} m · {hourRange(Math.max(0, localHour))}</p>
+                )}
+                <p className="text-sm tabular-nums">
+                  <span className="font-bold">{placeNow.electric.toLocaleString('en-US')}</span> e-bikes ·{' '}
+                  <span className="font-bold">{placeNow.classic.toLocaleString('en-US')}</span> classic
+                  {placeIsBusiest && <span className="text-slate-500"> ({hourRange(localHour)})</span>}
+                </p>
+                {!placeIsBusiest && (
+                  <button
+                    onClick={() => { jumpToHour(selectedPlace.busiestHour.hour); setIsPlaying(false); }}
+                    className="mt-1 w-full py-1.5 bg-slate-900 text-white rounded text-xs hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                  >
+                    Jump to busiest hour ({hourRange(selectedPlace.busiestHour.hour)})
+                  </button>
+                )}
+                <button
+                  onClick={onResetView}
+                  className="w-full py-1.5 bg-black/5 text-slate-700 rounded text-xs hover:bg-black/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                >
+                  Back to the city
+                </button>
+              </div>
+            </Popup>
+          )}
         </MapGL>
       </DeckGL>
 
@@ -416,12 +640,15 @@ export default function MapViewport() {
         />
       )}
 
+      <PlacesPanel places={places} selectedId={selectedPlace?.id ?? null} onSelect={onSelectPlace} />
+
       <ViewControls
         index={daysIndex ?? null}
         currentDate={sources?.date ?? null}
         stats={dayStats}
-        shown={visibleTrips.length}
-        total={trips.length}
+        shown={ridesManifest ? rideCounts.shown : visibleTrips.length}
+        total={ridesManifest ? rideCounts.total : trips.length}
+        allRides={ridesManifest !== null}
         hasRiderData={hasRiderData}
       />
 

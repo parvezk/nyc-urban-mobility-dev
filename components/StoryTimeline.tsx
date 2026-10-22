@@ -50,14 +50,14 @@ export default function StoryTimeline({
 
   return (
     <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-3xl z-50 pointer-events-auto">
-      <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 p-5 rounded-2xl shadow-2xl flex flex-col gap-3 text-white">
+      <div className="bg-[#FAFAF8]/90 backdrop-blur-xl border border-black/5 p-5 rounded-2xl shadow-[0_10px_40px_rgba(20,22,30,0.14)] flex flex-col gap-3 text-slate-900">
         
         <div className="flex justify-between items-end">
           <div>
-            <h2 className="text-2xl font-bold text-slate-100 tabular-nums">
+            <h2 className="text-2xl font-bold text-slate-900 tabular-nums">
               {formatTime(currentTime)}
             </h2>
-            <p className="text-xs text-slate-400 font-medium tracking-wide">
+            <p className="text-xs text-slate-500 font-medium tracking-wide">
               {storyLabel}
             </p>
             <p className="text-[10px] text-slate-500 tracking-wide mt-0.5">
@@ -67,7 +67,7 @@ export default function StoryTimeline({
           
           <button 
             onClick={onTogglePlay}
-            className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center border border-slate-600 transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            className="w-12 h-12 rounded-full bg-slate-900 text-white hover:bg-slate-700 flex items-center justify-center border border-transparent transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             aria-label={isPlaying ? "Pause timeline" : "Play timeline"}
             title={isPlaying ? "Pause timeline" : "Play timeline"}
           >
@@ -86,7 +86,7 @@ export default function StoryTimeline({
             max={maxTime}
             value={currentTime}
             onChange={(e) => onTimeChange(Number(e.target.value))}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-slate-300 hover:accent-slate-200 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900 hover:accent-slate-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             aria-label="Timeline scrubber"
           />
         </div>
@@ -99,8 +99,8 @@ export default function StoryTimeline({
       </div>
 
       {/* Keyboard Controls Reference */}
-      <div className="absolute right-[-240px] top-0 bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-xl p-4 text-xs text-slate-400 font-mono flex flex-col gap-2 pointer-events-none hidden lg:flex">
-        <div className="text-slate-300 font-bold mb-1 uppercase tracking-wider text-[10px]">Camera Controls</div>
+      <div className="absolute right-[-240px] top-0 bg-[#FAFAF8]/80 backdrop-blur-md border border-black/5 rounded-xl p-4 text-xs text-slate-500 font-mono flex flex-col gap-2 pointer-events-none hidden lg:flex">
+        <div className="text-slate-600 font-bold mb-1 uppercase tracking-wider text-[10px]">Camera Controls</div>
         <div className="flex justify-between gap-4"><span>Scroll</span> <span className="text-slate-500">Zoom</span></div>
         <div className="flex justify-between gap-4"><span>Click + Drag</span> <span className="text-slate-500">Pan</span></div>
         <div className="flex justify-between gap-4"><span>Shift + Drag</span> <span className="text-slate-500">Rotate</span></div>
