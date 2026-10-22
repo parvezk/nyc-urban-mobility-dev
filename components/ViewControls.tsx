@@ -70,9 +70,10 @@ interface ViewControlsProps {
   shown: number;                // rides drawn after filters
   total: number;                // rides in the loaded sample
   hasRiderData: boolean;        // older trip files lack member/casual
+  allRides?: boolean;           // true when every ride is drawn, not a sample
 }
 
-export default function ViewControls({ index, currentDate, stats, shown, total, hasRiderData }: ViewControlsProps) {
+export default function ViewControls({ index, currentDate, stats, shown, total, hasRiderData, allRides = false }: ViewControlsProps) {
   const { bike, rider, setDay, setBike, setRider } = useViewStore();
 
   const entries: DayEntry[] = (index?.days ?? []).map(d => (typeof d === 'string' ? { date: d } : d));
@@ -130,7 +131,9 @@ export default function ViewControls({ index, currentDate, stats, shown, total, 
 
       {total > 0 && (
         <p className="text-[10px] text-slate-500" aria-live="polite">
-          Showing {shown.toLocaleString('en-US')} of {total.toLocaleString('en-US')} sampled rides
+          {allRides
+            ? `Showing ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} rides`
+            : `Showing ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} sampled rides`}
         </p>
       )}
     </div>
