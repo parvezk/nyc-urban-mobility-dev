@@ -8,6 +8,9 @@ import MapGL, { Popup } from 'react-map-gl/maplibre';
 import { FlyToInterpolator } from '@deck.gl/core';
 import StoryTimeline, { DayStats } from './StoryTimeline';
 import DayStatsPanel from './DayStatsPanel';
+import ViewControls, { CLASSIC_RGB, EBIKE_RGB } from './ViewControls';
+import { DaysIndex, DaySources, loadDaysIndex, resolveDayFrom } from '@/lib/dayData';
+import { matchesFilters, useViewStore } from '@/lib/store/viewStore';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -24,6 +27,7 @@ const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.j
 // A single animated trip path: [lng, lat, epochMs] waypoints.
 interface TripPath {
   vendor_type: string;
+  member?: boolean; // annual member vs casual rider (missing in older files)
   path: [number, number, number][];
 }
 
@@ -82,45 +86,100 @@ export default function MapViewport() {
   // Ensure we only auto-jump to the mid-rush opening time once.
   const didInitTime = useRef(false);
 
-  // 1. Data Fetching
+  // Which day and which rides to show (Zustand, shared with ViewControls).
+  const day = useViewStore(st => st.day);
+  const bike = useViewStore(st => st.bike);
+  const rider = useViewStore(st => st.rider);
+  const setDay = useViewStore(st => st.setDay);
+
+  // undefined = still loading; null = no per-day index (legacy single-day files)
+  const [daysIndex, setDaysIndex] = useState<DaysIndex | null | undefined>(undefined);
+  const [sources, setSources] = useState<DaySources | null>(null);
+
+  // 1. Static data + the list of available days. `?day=` (a date, or a preset
+  // such as "busiest") picks the opening day so a shared link opens on it.
   useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('day');
+    if (requested) setDay(requested);
+
     fetch('/data/buildings.json')
       .then(res => res.json())
       .then(data => setBuildings(data));
 
-    fetch('/data/hotspots.json')
-      .then(res => res.json())
-      .then((data: HotspotsData) => setHotspots(data));
+    loadDaysIndex().then(setDaysIndex);
+  }, [setDay]);
 
-    fetch('/data/day-stats.json')
-      .then(res => res.json())
-      .then((data: DayStats) => setDayStats(data));
+  // 1a. Resolve the requested day to file URLs, and mirror it in the URL.
+  useEffect(() => {
+    if (daysIndex === undefined) return;
+    const next = resolveDayFrom(daysIndex, day);
+    setSources(prev => (prev?.tripsUrl === next.tripsUrl ? prev : next));
 
-    fetch('/api/trips')
+    if (next.date) {
+      const url = new URL(window.location.href);
+      if (next.date === daysIndex?.presets?.default) url.searchParams.delete('day');
+      else url.searchParams.set('day', next.date);
+      window.history.replaceState(null, '', url);
+    }
+  }, [daysIndex, day]);
+
+  // 1b. Load the selected day's trips, stats and hotspots. Switching days
+  // clears the old day first so the 8 AM jump below waits for the new one.
+  useEffect(() => {
+    if (!sources) return;
+    let cancelled = false;
+    didInitTime.current = false;
+    setTrips([]);
+    setDayStats(null);
+    setHotspots(null);
+    setSelectedCluster(null);
+    setMaxTime(1);
+
+    fetch(sources.hotspotsUrl)
+      .then(res => res.json())
+      .then((data: HotspotsData) => { if (!cancelled) setHotspots(data); });
+
+    fetch(sources.statsUrl)
+      .then(res => res.json())
+      .then((data: DayStats) => { if (!cancelled) setDayStats(data); });
+
+    fetch(sources.tripsUrl)
       .then(res => res.json())
       .then((data: TripPath[]) => {
+        if (cancelled) return;
         if (!Array.isArray(data) || data.length === 0) {
-          console.warn('Trips API returned invalid data or empty set:', data);
+          console.warn('Trips file returned invalid data or empty set:', data);
           return;
         }
 
         // Find the absolute authentic min and max timestamps
-        const absoluteMin = Math.min(...data.map(d => d.path[0][2]));
-        const absoluteMax = Math.max(...data.map(d => d.path[d.path.length-1][2]));
+        let absoluteMin = Infinity;
+        let absoluteMax = -Infinity;
+        for (const d of data) {
+          if (d.path[0][2] < absoluteMin) absoluteMin = d.path[0][2];
+          if (d.path[d.path.length - 1][2] > absoluteMax) absoluteMax = d.path[d.path.length - 1][2];
+        }
 
         setMinTime(absoluteMin);
         setMaxTime(absoluteMax);
-        // Initialize scrubber to start — but never clobber the mid-rush jump (1b).
-        // In dev, StrictMode double-runs this effect; the second response can land
-        // AFTER the 8 AM jump and would otherwise reset the clock to midnight.
+        // Initialize scrubber to start, but never clobber the mid-rush jump (1c).
         if (!didInitTime.current) setTime(absoluteMin);
 
         // Keep timestamps strictly untouched as absolute Epochs for geographic reality
         setTrips(data);
       });
-  }, []);
 
-  // 1b. Open mid-rush: once both trips and day-stats have loaded, jump the clock
+    return () => { cancelled = true; };
+  }, [sources]);
+
+  // Rides that pass the bike / rider filters.
+  const visibleTrips = useMemo(
+    () => (bike === 'all' && rider === 'all' ? trips : trips.filter(t => matchesFilters(t, bike, rider))),
+    [trips, bike, rider]
+  );
+  const hasRiderData = useMemo(() => trips.some(t => typeof t.member === 'boolean'), [trips]);
+
+  // 1c. Open mid-rush: once both trips and day-stats have loaded, jump the clock
   // to 08:00 AM (America/New_York) of the story's date, clamped to the trip range.
   // The offset is derived per-date via Intl, so summer (EDT) and winter (EST)
   // datasets both open at true 8 AM local.
@@ -270,13 +329,13 @@ export default function MapViewport() {
     }),
     new TripsLayer({
       id: 'trips',
-      data: trips,
+      data: visibleTrips,
       // getPath must return [lng, lat] pairs ONLY — no timestamps
       getPath: (d: any) => d.path.map((pt: any) => [pt[0], pt[1]]),
       // getTimestamps returns the 3rd element (the epoch ms) from each waypoint
       getTimestamps: (d: any) => d.path.map((pt: any) => pt[2]),
       // electric_bike -> teal; classic_bike (and any other value) -> orange
-      getColor: (d: any) => (d.vendor_type === 'electric_bike' ? [23, 184, 190] : [253, 128, 93]),
+      getColor: (d: any) => (d.vendor_type === 'electric_bike' ? EBIKE_RGB : CLASSIC_RGB),
       opacity: 0.8,
       widthMinPixels: 3,
       jointRounded: true,
@@ -356,6 +415,15 @@ export default function MapViewport() {
           }}
         />
       )}
+
+      <ViewControls
+        index={daysIndex ?? null}
+        currentDate={sources?.date ?? null}
+        stats={dayStats}
+        shown={visibleTrips.length}
+        total={trips.length}
+        hasRiderData={hasRiderData}
+      />
 
       <StoryTimeline
         minTime={minTime}

@@ -8,8 +8,19 @@ import type { DayStats } from '@/lib/clip/story';
 //   /data/days/<YYYY-MM-DD>/day-stats.json, trips.json
 // Legacy layout (single day): /data/day-stats.json + /api/trips.
 
+// One entry of index.json's `days` (written by ETL stage 5).
+export interface DayEntry {
+  date: string;
+  weekday?: string;
+  totalTrips?: number;
+  peakActive?: number;
+  peakMinute?: string;
+}
+
 export interface DaysIndex {
-  days: Array<string | { date: string }>;
+  month?: string;          // "202609"
+  monthLabel?: string;     // "September 2026"
+  days: Array<string | DayEntry>;
   presets?: { default?: string; busiest?: string; [name: string]: string | undefined };
 }
 
@@ -17,9 +28,40 @@ export interface DaySources {
   date: string | null;     // null = legacy single-day files
   statsUrl: string;
   tripsUrl: string;
+  hotspotsUrl: string;
 }
 
-const LEGACY: DaySources = { date: null, statsUrl: '/data/day-stats.json', tripsUrl: '/api/trips' };
+const LEGACY: DaySources = {
+  date: null,
+  statsUrl: '/data/day-stats.json',
+  tripsUrl: '/api/trips',
+  hotspotsUrl: '/data/hotspots.json',
+};
+
+export function sourcesFor(date: string): DaySources {
+  return {
+    date,
+    statsUrl: `/data/days/${date}/day-stats.json`,
+    tripsUrl: `/data/days/${date}/trips.json`,
+    hotspotsUrl: `/data/days/${date}/hotspots.json`,
+  };
+}
+
+// The list of built days, or null when the per-day layout isn't deployed.
+export async function loadDaysIndex(): Promise<DaysIndex | null> {
+  try {
+    const res = await fetch('/data/days/index.json');
+    return res.ok ? ((await res.json()) as DaysIndex) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve against an index already in hand (no extra fetch).
+export function resolveDayFrom(index: DaysIndex | null, requested?: string | null): DaySources {
+  const date = index ? pickDay(index, requested) : null;
+  return date ? sourcesFor(date) : LEGACY;
+}
 
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
@@ -35,19 +77,7 @@ export function pickDay(index: DaysIndex, requested?: string | null): string | n
 }
 
 export async function resolveDay(requested?: string | null): Promise<DaySources> {
-  try {
-    const res = await fetch('/data/days/index.json');
-    if (!res.ok) return LEGACY;
-    const date = pickDay((await res.json()) as DaysIndex, requested);
-    if (!date) return LEGACY;
-    return {
-      date,
-      statsUrl: `/data/days/${date}/day-stats.json`,
-      tripsUrl: `/data/days/${date}/trips.json`,
-    };
-  } catch {
-    return LEGACY;
-  }
+  return resolveDayFrom(await loadDaysIndex(), requested);
 }
 
 export async function loadDayStats(sources: DaySources): Promise<DayStats> {

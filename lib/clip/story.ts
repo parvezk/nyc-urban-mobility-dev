@@ -20,6 +20,7 @@ export interface DayStats {
   morningPeak?: StoryMoment;
   straightLineKm?: number;
   ebikeShare?: number;        // 0..1
+  memberShare?: number;       // 0..1, annual members vs casual riders
   medianRideMinutes?: number;
   medianRideKm?: number;
   activeByMinute?: { startEpochMs: number; stepMs: number; values: number[] };
