@@ -5,7 +5,8 @@
 #    busiest day of the month.
 # 2. Builds an OSRM bicycle routing graph for NYC from OpenStreetMap and runs
 #    it in Docker on the runner (cached per month).
-# 3. Samples, routes and summarises each day, then commits
+# 3. Samples, routes and summarises each day (plus every ride, routed, in
+#    compact hourly chunks, and per-landmark hourly counts), then commits
 #    public/data/days/ back to the branch it ran on. Vercel deploys from there.
 #
 # Run it from the Actions tab ("Run workflow"), optionally with a month.
@@ -99,6 +100,8 @@ jobs:
             node scripts/etl/1-aggregate-remote-duckdb.mjs --date "$d"
             node scripts/etl/2-osrm-routing.mjs --date "$d"
             node scripts/etl/4-hotspot-stats.mjs --date "$d"
+            # Every ride of the day, routed, in hourly binary chunks (rides/).
+            node scripts/etl/6-route-all-rides.mjs --date "$d"
             echo "::endgroup::"
           done
           node scripts/etl/5-build-index.mjs
