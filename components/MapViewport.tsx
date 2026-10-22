@@ -7,6 +7,7 @@ import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import MapGL, { Popup } from 'react-map-gl/maplibre';
 import { FlyToInterpolator } from '@deck.gl/core';
 import StoryTimeline, { DayStats } from './StoryTimeline';
+import DayStatsPanel from './DayStatsPanel';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -344,6 +345,17 @@ export default function MapViewport() {
           )}
         </MapGL>
       </DeckGL>
+
+      {dayStats && (
+        <DayStatsPanel
+          stats={dayStats}
+          currentTime={time}
+          onJump={(epochMs) => {
+            setTime(Math.max(minTime, Math.min(maxTime, epochMs)));
+            setIsPlaying(false);
+          }}
+        />
+      )}
 
       <StoryTimeline
         minTime={minTime}

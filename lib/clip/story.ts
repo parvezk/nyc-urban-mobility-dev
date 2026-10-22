@@ -19,6 +19,9 @@ export interface DayStats {
   nightLow?: StoryMoment;
   morningPeak?: StoryMoment;
   straightLineKm?: number;
+  ebikeShare?: number;        // 0..1
+  medianRideMinutes?: number;
+  medianRideKm?: number;
   activeByMinute?: { startEpochMs: number; stepMs: number; values: number[] };
 }
 
@@ -34,9 +37,9 @@ export interface FormatSpec {
 // vertical frame; -61° lays it left-to-right for landscape. `zoom` is for the
 // export size and is scaled for smaller previews (see zoomForHeight).
 export const FORMATS: Record<ClipFormat, FormatSpec> = {
-  '9x16': { width: 1080, height: 1920, view: { longitude: -73.988, latitude: 40.738, zoom: 13.1, pitch: 40, bearing: 29 } },
-  '1x1': { width: 1080, height: 1080, view: { longitude: -73.988, latitude: 40.738, zoom: 12.6, pitch: 40, bearing: 29 } },
-  '16x9': { width: 1920, height: 1080, view: { longitude: -73.983, latitude: 40.742, zoom: 12.7, pitch: 40, bearing: -61 } },
+  '9x16': { width: 1080, height: 1920, view: { longitude: -73.994, latitude: 40.741, zoom: 13.1, pitch: 40, bearing: 29 } },
+  '1x1': { width: 1080, height: 1080, view: { longitude: -73.991, latitude: 40.740, zoom: 12.6, pitch: 40, bearing: 29 } },
+  '16x9': { width: 1920, height: 1080, view: { longitude: -73.991, latitude: 40.754, zoom: 12.7, pitch: 40, bearing: -61 } },
 };
 
 export function parseFormat(value: string | null | undefined): ClipFormat {
