@@ -1,0 +1,129 @@
+{
+  "format": "cbr1",
+  "date": "2026-09-18",
+  "dayStartEpochMs": 1789704000000,
+  "totalRides": 211680,
+  "fallbackRides": 0,
+  "hours": [
+    {
+      "hour": 0,
+      "rides": 2985,
+      "bytes": 117053
+    },
+    {
+      "hour": 1,
+      "rides": 1762,
+      "bytes": 67175
+    },
+    {
+      "hour": 2,
+      "rides": 975,
+      "bytes": 38842
+    },
+    {
+      "hour": 3,
+      "rides": 610,
+      "bytes": 24818
+    },
+    {
+      "hour": 4,
+      "rides": 646,
+      "bytes": 25936
+    },
+    {
+      "hour": 5,
+      "rides": 1589,
+      "bytes": 62629
+    },
+    {
+      "hour": 6,
+      "rides": 4256,
+      "bytes": 166573
+    },
+    {
+      "hour": 7,
+      "rides": 9433,
+      "bytes": 367484
+    },
+    {
+      "hour": 8,
+      "rides": 13478,
+      "bytes": 512268
+    },
+    {
+      "hour": 9,
+      "rides": 10563,
+      "bytes": 388068
+    },
+    {
+      "hour": 10,
+      "rides": 8383,
+      "bytes": 308135
+    },
+    {
+      "hour": 11,
+      "rides": 8571,
+      "bytes": 314455
+    },
+    {
+      "hour": 12,
+      "rides": 9727,
+      "bytes": 355296
+    },
+    {
+      "hour": 13,
+      "rides": 10540,
+      "bytes": 385157
+    },
+    {
+      "hour": 14,
+      "rides": 12254,
+      "bytes": 460313
+    },
+    {
+      "hour": 15,
+      "rides": 13681,
+      "bytes": 522726
+    },
+    {
+      "hour": 16,
+      "rides": 16041,
+      "bytes": 620180
+    },
+    {
+      "hour": 17,
+      "rides": 19651,
+      "bytes": 765747
+    },
+    {
+      "hour": 18,
+      "rides": 19082,
+      "bytes": 740997
+    },
+    {
+      "hour": 19,
+      "rides": 14899,
+      "bytes": 572227
+    },
+    {
+      "hour": 20,
+      "rides": 10122,
+      "bytes": 385698
+    },
+    {
+      "hour": 21,
+      "rides": 8122,
+      "bytes": 316923
+    },
+    {
+      "hour": 22,
+      "rides": 7634,
+      "bytes": 295906
+    },
+    {
+      "hour": 23,
+      "rides": 6675,
+      "bytes": 256918
+    }
+  ]
+}
