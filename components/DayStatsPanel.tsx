@@ -5,8 +5,9 @@ import type { DayStats } from '@/lib/clip/story';
 import { distanceComparison, formatClock, formatStoryDate } from '@/lib/clip/story';
 import { sunTimes } from '@/lib/lighting/sun';
 
-// The day at a glance: a "shape of the day" line plus the headline numbers.
-// Rows with a time jump the map's clock to that moment.
+// Field guide to the day: a "shape of the day" line, the day's chapters
+// (click one to jump the clock there; the current one is highlighted as the
+// day plays), then the headline numbers.
 
 const SPARK_W = 276;
 const SPARK_H = 48;
@@ -25,7 +26,12 @@ interface Row {
   value: string;
   unit?: string;    // follows the value: "58 bikes"
   detail?: string;  // after a dot: "· 3:43 AM"
-  jumpTo?: number;
+}
+
+interface Chapter {
+  title: string;
+  caption?: string;
+  at: number;       // epoch ms
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
@@ -58,17 +64,22 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
   const sunrise = sunEpoch(sun.sunrise);
   const sunset = sunEpoch(sun.sunset);
 
-  const moments: Row[] = [];
+  const chapters: Chapter[] = [];
   if (stats.nightLow) {
-    moments.push({ label: 'Quietest minute', value: fmt(stats.nightLow.active), unit: 'bikes', detail: formatClock(stats.nightLow.epochMs), jumpTo: stats.nightLow.epochMs });
+    chapters.push({ title: 'Quietest minute', caption: `${fmt(stats.nightLow.active)} bikes moving. The city is asleep.`, at: stats.nightLow.epochMs });
   }
-  if (sunrise !== null) moments.push({ label: 'Sunrise', value: formatClock(sunrise), jumpTo: sunrise });
+  if (sunrise !== null) chapters.push({ title: 'Sunrise', caption: 'New York starts to wake up.', at: sunrise });
   if (stats.morningPeak) {
-    moments.push({ label: 'Morning peak', value: fmt(stats.morningPeak.active), detail: formatClock(stats.morningPeak.epochMs), jumpTo: stats.morningPeak.epochMs });
+    chapters.push({ title: 'Morning peak', caption: `${fmt(stats.morningPeak.active)} bikes moving. Morning rush.`, at: stats.morningPeak.epochMs });
   }
-  moments.push({ label: 'Day peak', value: fmt(stats.peakActive), detail: formatClock(stats.peakEpochMs), jumpTo: stats.peakEpochMs });
-  if (sunset !== null) moments.push({ label: 'Sunset', value: formatClock(sunset), jumpTo: sunset });
-  const rows: Row[] = moments.sort((a, b) => (a.jumpTo ?? 0) - (b.jumpTo ?? 0));
+  chapters.push({ title: 'Day peak', caption: `${fmt(stats.peakActive)} bikes at once, the most all day.`, at: stats.peakEpochMs });
+  if (sunset !== null) chapters.push({ title: 'Sunset', at: sunset });
+  chapters.sort((x, y) => x.at - y.at);
+  // The chapter the clock is in: the last one it has passed.
+  let current = -1;
+  chapters.forEach((c, i) => { if (currentTime >= c.at) current = i; });
+
+  const rows: Row[] = [];
   rows.push({ label: 'Rides', value: fmt(stats.totalTrips) });
   if (stats.straightLineKm) {
     rows.push({
@@ -93,11 +104,11 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
   return (
     <section
       aria-label="One day of Citi Bike, at a glance"
-      className="absolute top-4 left-4 z-50 w-[320px] max-w-[calc(100vw-2rem)] bg-[#FAFAF8]/90 backdrop-blur-xl border border-black/5 rounded-2xl shadow-[0_10px_40px_rgba(20,22,30,0.14)] text-slate-900"
+      className="absolute top-4 left-4 z-50 w-[320px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-7rem)] overflow-y-auto bg-[#FAFAF8]/90 backdrop-blur-xl border border-black/5 rounded-2xl shadow-[0_10px_40px_rgba(20,22,30,0.14)] text-slate-900"
     >
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
         <div>
-          <h1 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">One day of Citi Bike</h1>
+          <h1 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">One day of Citi Bike · Manhattan</h1>
           <p className="text-lg font-bold leading-tight mt-1">{formatStoryDate(stats.date)}</p>
         </div>
         <button
@@ -145,33 +156,45 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
             </div>
           )}
 
-          <div className="text-[13px]">
-            {rows.map(r => {
-              const content = (
-                <>
-                  <span className="text-slate-500">{r.label}</span>
-                  <span className="text-right">
-                    <span className="font-bold tabular-nums text-slate-900">{r.value}</span>
-                    {r.unit && <span className="text-slate-600"> {r.unit}</span>}
-                    {r.detail && <span className="text-slate-600"> · {r.detail}</span>}
-                  </span>
-                </>
-              );
-              return r.jumpTo !== undefined ? (
-                <button
-                  key={r.label}
-                  onClick={() => onJump(r.jumpTo as number)}
-                  title={`Jump to ${formatClock(r.jumpTo)}`}
-                  className="w-full flex justify-between items-baseline gap-3 py-1.5 border-t border-black/5 text-left hover:bg-black/5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                >
-                  {content}
-                </button>
-              ) : (
-                <div key={r.label} className="flex justify-between items-baseline gap-3 py-1.5 border-t border-black/5">
-                  {content}
-                </div>
+          <ol aria-label="Chapters of the day" className="mb-3">
+            {chapters.map((c, i) => {
+              const active = i === current;
+              return (
+                <li key={c.title}>
+                  <button
+                    onClick={() => onJump(c.at)}
+                    aria-current={active ? 'step' : undefined}
+                    title={`Jump to ${formatClock(c.at)}`}
+                    className={`group w-full grid grid-cols-[64px_1fr] gap-x-3 rounded-lg px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+                      active ? 'bg-slate-900 text-white' : 'hover:bg-black/5'
+                    }`}
+                  >
+                    <span className={`text-[12px] font-semibold tabular-nums pt-px ${active ? 'text-white/80' : 'text-slate-500'}`}>
+                      {formatClock(c.at)}
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-semibold leading-snug">{c.title}</span>
+                      {c.caption && (
+                        <span className={`block text-[12px] leading-snug ${active ? 'text-white/75' : 'text-slate-600'}`}>{c.caption}</span>
+                      )}
+                    </span>
+                  </button>
+                </li>
               );
             })}
+          </ol>
+
+          <div className="text-[13px]">
+            {rows.map(r => (
+              <div key={r.label} className="flex justify-between items-baseline gap-3 py-1.5 border-t border-black/5">
+                <span className="text-slate-500">{r.label}</span>
+                <span className="text-right">
+                  <span className="font-bold tabular-nums text-slate-900">{r.value}</span>
+                  {r.unit && <span className="text-slate-600"> {r.unit}</span>}
+                  {r.detail && <span className="text-slate-600"> · {r.detail}</span>}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ export interface RidesManifest {
   date: string;
   dayStartEpochMs: number;
   totalRides: number;
+  scope?: string;              // "manhattan" when the ETL already kept only Manhattan rides
   hours: { hour: number; rides: number; bytes: number }[];
 }
 
@@ -38,21 +39,34 @@ export interface RideChunk {
 const groupOf = (flags: number): GroupKey =>
   (flags & 1 ? 'ebike' : 'classic') + (flags & 2 ? '-member' : '-casual') as GroupKey;
 
-export function decodeChunk(buf: ArrayBuffer, hour: number): RideChunk {
+// Optional filter on a ride's first and last point (lng, lat).
+export type RideFilter = (x0: number, y0: number, x1: number, y1: number) => boolean;
+
+export function decodeChunk(buf: ArrayBuffer, hour: number, keep?: RideFilter): RideChunk {
   const v = new DataView(buf);
   const magic = String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3));
   if (magic !== 'CBR1') throw new Error(`Bad ride chunk for hour ${hour}: magic ${magic}`);
   const count = v.getUint32(4, true);
 
-  // Pass 1: count rides and vertices per group.
+  // Pass 1: decide which rides to keep; count rides and vertices per group.
   const rides: Record<string, number> = {};
   const verts: Record<string, number> = {};
   for (const k of GROUP_KEYS) { rides[k] = 0; verts[k] = 0; }
+  const kept = new Uint8Array(count);
+  let keptCount = 0;
   let o = 8;
   for (let i = 0; i < count; i++) {
     const g = groupOf(v.getUint8(o));
     const n = v.getUint8(o + 1);
-    rides[g]++; verts[g] += n;
+    let ok = true;
+    if (keep) {
+      const x0 = v.getInt32(o + 6, true);
+      const y0 = v.getInt32(o + 10, true);
+      let x = x0, y = y0;
+      for (let j = 0, p = o + 14; j < n - 1; j++, p += 6) { x += v.getInt16(p, true); y += v.getInt16(p + 2, true); }
+      ok = keep(x0 / 1e5, y0 / 1e5, x / 1e5, y / 1e5);
+    }
+    if (ok) { kept[i] = 1; keptCount++; rides[g]++; verts[g] += n; }
     o += 14 + (n - 1) * 6;
   }
 
@@ -75,6 +89,7 @@ export function decodeChunk(buf: ArrayBuffer, hour: number): RideChunk {
   for (let i = 0; i < count; i++) {
     const k = groupOf(v.getUint8(o));
     const n = v.getUint8(o + 1);
+    if (!kept[i]) { o += 14 + (n - 1) * 6; continue; }
     let t = v.getUint32(o + 2, true);
     let x = v.getInt32(o + 6, true);
     let y = v.getInt32(o + 10, true);
@@ -90,7 +105,7 @@ export function decodeChunk(buf: ArrayBuffer, hour: number): RideChunk {
     }
     if (t > endSec) endSec = t;
   }
-  return { hour, rides: count, endSec, groups };
+  return { hour, rides: keptCount, endSec, groups };
 }
 
 async function gunzipIfNeeded(res: Response): Promise<ArrayBuffer> {
@@ -117,10 +132,10 @@ export async function loadManifest(date: string): Promise<RidesManifest | null> 
   }
 }
 
-export async function loadChunk(date: string, hour: number): Promise<RideChunk> {
+export async function loadChunk(date: string, hour: number, keep?: RideFilter): Promise<RideChunk> {
   const res = await fetch(`${ridesBase(date)}/${String(hour).padStart(2, '0')}.bin.gz`);
   if (!res.ok) throw new Error(`Ride chunk ${hour} failed: ${res.status}`);
-  return decodeChunk(await gunzipIfNeeded(res), hour);
+  return decodeChunk(await gunzipIfNeeded(res), hour, keep);
 }
 
 // Hours ordered for progressive loading: the one on screen first, then forward.

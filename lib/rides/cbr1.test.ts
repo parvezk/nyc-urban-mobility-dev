@@ -35,6 +35,16 @@ describe('cbr1 decoder', () => {
     expect(c.groups['ebike-casual'].length).toBe(0);
   });
 
+  it('drops rides the filter rejects', () => {
+    // Keep only rides that end east of -73.99 (the e-bike ride).
+    const c = decodeChunk(fixture(), 8, (_x0, _y0, x1) => x1 > -73.99);
+    expect(c.rides).toBe(1);
+    expect(c.groups['ebike-member'].length).toBe(1);
+    expect(Array.from(c.groups['ebike-member'].timestamps)).toEqual([28_800, 28_830, 28_890]);
+    expect(c.groups['classic-casual'].length).toBe(0);
+    expect(c.groups['classic-casual'].positions.length).toBe(0);
+  });
+
   it('rejects files with the wrong magic', () => {
     const buf = fixture();
     new DataView(buf).setUint8(0, 0);
