@@ -13,6 +13,7 @@
  *
  * Usage:
  *   node scripts/record-clip.mjs                       # 9x16, 1x1 and 16x9
+ *   node scripts/record-clip.mjs --route lite           # the 10-second lite loop (every ride)
  *   node scripts/record-clip.mjs --format 9x16
  *   node scripts/record-clip.mjs --day busiest          # a date or preset from data/days/index.json
  *   node scripts/record-clip.mjs --url http://localhost:3000 --out out/clips
@@ -32,6 +33,8 @@ const baseUrl = arg('url', 'http://localhost:3000');
 const outDir = arg('out', path.join('out', 'clips'));
 const formatArg = arg('format', 'all');
 const day = arg('day', '');
+const route = arg('route', 'clip');
+if (!['clip', 'lite'].includes(route)) throw new Error(`Unknown route "${route}". Use clip or lite.`);
 const formats = formatArg === 'all' ? Object.keys(SIZES) : [formatArg];
 for (const f of formats) {
   if (!SIZES[f]) throw new Error(`Unknown format "${f}". Use 9x16, 1x1, 16x9 or all.`);
@@ -59,13 +62,13 @@ try {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     page.on('pageerror', e => console.warn(`  page error: ${e.message}`));
 
-    await page.goto(`${baseUrl}/clip?format=${format}&record=1${day ? `&day=${encodeURIComponent(day)}` : ''}`);
-    await page.waitForFunction(() => window.__clip?.isReady(), null, { timeout: 120000 });
+    await page.goto(`${baseUrl}/${route}?format=${format}&record=1${day ? `&day=${encodeURIComponent(day)}` : ''}`);
+    await page.waitForFunction(() => window.__clip?.isReady(), null, { timeout: 300000 });
     // Hide the Next.js dev badge if this is a dev server.
     await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
 
     const { frames, fps } = await page.evaluate(() => ({ frames: window.__clip.frames, fps: window.__clip.fps }));
-    const outFile = path.join(outDir, `one-day-of-citi-bike${day ? `-${day}` : ''}-${format}.mp4`);
+    const outFile = path.join(outDir, `one-day-of-citi-bike${route === 'lite' ? '-lite' : ''}${day ? `-${day}` : ''}-${format}.mp4`);
     console.log(`🎬 ${format}: ${frames} frames at ${fps} fps -> ${outFile}`);
 
     const ffmpeg = spawn('ffmpeg', [
