@@ -11,6 +11,8 @@
  *   day-stats.json  { date, totalTrips, peakMinute, peakEpochMs, peakActive,
  *                                 nightLow, morningPeak, straightLineKm, ebikeShare,
  *                                 medianRideMinutes, medianRideKm, memberShare, activeByMinute }
+ *   landmarks.json  [{ id, name, lng, lat, radiusM, hourly:[{hour, electric, classic}]×24,
+ *                      busiestHour:{hour, electric, classic, total} }]
  *   hotspots.json   { bucketMs, clusters:[{ lng, lat, name, counts:[[bucketEpochMs, activeCount],…] }] }
  *
  * --- TIMEZONE / EPOCH PARITY (critical) ------------------------------------
@@ -37,11 +39,13 @@ import fs from 'fs';
 import path from 'path';
 import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
 import { csvGlob, dayDir, monthOf, parseArgs, requireDate, tripFilterSql } from './lib/paths.mjs';
+import { LANDMARKS, RADIUS_M, metresBetween } from './lib/landmarks.mjs';
 
 const DAY = requireDate(parseArgs());
 const CSV_GLOB = csvGlob(monthOf(DAY));
 const DAY_STATS_PATH = path.join(dayDir(DAY), 'day-stats.json');
 const HOTSPOTS_PATH = path.join(dayDir(DAY), 'hotspots.json');
+const LANDMARKS_PATH = path.join(dayDir(DAY), 'landmarks.json');
 
 const BUCKET_MS = 300000;      // 5-minute buckets
 const GRID_DEG = 0.005;        // ~0.5 km grid cell for clustering start stations
@@ -220,6 +224,32 @@ function computeStoryStats(trips, day) {
     };
 }
 
+// --- landmarks: rides starting or ending near each place, by local hour ------
+// A ride counts once per landmark: at its start hour if it starts nearby,
+// otherwise at its end hour (if that is still on this day).
+function computeLandmarks(trips, day) {
+    const dayStartMs = nyWallClockToEpochMs(`${day}T00:00:00.000`);
+    const hourOf = (ms) => Math.floor((ms - dayStartMs) / 3600000);
+    return LANDMARKS.map((lm) => {
+        const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, electric: 0, classic: 0 }));
+        for (const t of trips) {
+            let hour = -1;
+            if (metresBetween(t.lat, t.lng, lm.lat, lm.lng) <= RADIUS_M) hour = hourOf(t.startMs);
+            else if (metresBetween(t.endLat, t.endLng, lm.lat, lm.lng) <= RADIUS_M) hour = hourOf(t.endMs);
+            if (hour < 0 || hour > 23) continue;
+            if (t.electric) hourly[hour].electric += 1;
+            else hourly[hour].classic += 1;
+        }
+        const best = hourly.reduce((a, b) => (b.electric + b.classic > a.electric + a.classic ? b : a));
+        return {
+            ...lm,
+            radiusM: RADIUS_M,
+            hourly,
+            busiestHour: { ...best, total: best.electric + best.classic },
+        };
+    });
+}
+
 // --- hotspots: grid-cell clusters × 5-min in-motion buckets -----------------
 function computeHotspots(trips) {
     const cells = new Map();
@@ -307,6 +337,10 @@ async function main() {
     }
     fs.writeFileSync(DAY_STATS_PATH, JSON.stringify(dayStats, null, 2));
 
+    // landmarks
+    const landmarks = computeLandmarks(trips, day);
+    fs.writeFileSync(LANDMARKS_PATH, JSON.stringify(landmarks));
+
     // hotspots
     const ranked = computeHotspots(trips);
     const { json, kept, dropped, clusters } = serializeHotspots(ranked);
@@ -318,6 +352,12 @@ async function main() {
     console.log(`   peakMinute=${dayStats.peakMinute} (NY)  peakActive=${dayStats.peakActive}  peakEpochMs=${dayStats.peakEpochMs}`);
     console.log(`   nightLow=${dayStats.nightLow.active} @ ${dayStats.nightLow.minute}  morningPeak=${dayStats.morningPeak.active} @ ${dayStats.morningPeak.minute}  straightLineKm=${dayStats.straightLineKm}`);
     console.log(`   ebikeShare=${dayStats.ebikeShare}  memberShare=${dayStats.memberShare}  medianRide=${dayStats.medianRideMinutes} min / ${dayStats.medianRideKm} km`);
+
+    console.log('\n📌 landmarks.json (busiest hour, rides starting or ending within ' + RADIUS_M + ' m):');
+    for (const lm of landmarks) {
+        const b = lm.busiestHour;
+        console.log(`   ${lm.name.padEnd(24)} ${String(b.hour).padStart(2, '0')}:00  ${b.total} rides (${b.electric} e-bike, ${b.classic} classic)`);
+    }
 
     const sizeKB = (Buffer.byteLength(json) / 1024).toFixed(1);
     const totalBuckets = clusters.reduce((s, c) => s + c.counts.length, 0);
