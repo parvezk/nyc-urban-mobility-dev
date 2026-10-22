@@ -21,6 +21,7 @@ import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
 import path from 'path';
 import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
+import { SCOPE, rideInScope } from './lib/scope.mjs';
 import { csvGlob, monthOf, parseArgs, requireDate, tripFilterSql, workDir } from './lib/paths.mjs';
 
 const args = parseArgs();
@@ -49,10 +50,20 @@ async function extractSample(con, day) {
                strftime(ended_at,   '%Y-%m-%dT%H:%M:%S.%g')    AS dropoff_time,
                start_lng, start_lat, end_lng, end_lat
         FROM src
-        USING SAMPLE ${SAMPLE_SIZE} ROWS
+        ORDER BY started_at
     `;
     const reader = await con.runAndReadAll(query);
-    return reader.getRowObjects().map((r) => ({
+    const inScope = reader.getRowObjects()
+        .filter((r) => rideInScope(bn(r.start_lng), bn(r.start_lat), bn(r.end_lng), bn(r.end_lat)));
+    // Seeded shuffle so re-runs pick the same sample.
+    let seed = 20260923;
+    const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    for (let i = inScope.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [inScope[i], inScope[j]] = [inScope[j], inScope[i]];
+    }
+    console.log(`   ${inScope.length} rides touch ${SCOPE}; sampling ${Math.min(SAMPLE_SIZE, inScope.length)}`);
+    return inScope.slice(0, SAMPLE_SIZE).map((r) => ({
         vendor_type: String(r.vendor_type),
         member: Boolean(r.member),
         pickup_time: String(r.pickup_time),

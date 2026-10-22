@@ -38,6 +38,7 @@ import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
 import path from 'path';
 import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
+import { SCOPE, rideInScope } from './lib/scope.mjs';
 import { csvGlob, dayDir, monthOf, parseArgs, requireDate, tripFilterSql } from './lib/paths.mjs';
 import { LANDMARKS, RADIUS_M, metresBetween } from './lib/landmarks.mjs';
 
@@ -325,13 +326,14 @@ async function main() {
     const con = await DuckDBConnection.create(instance);
 
     console.log('⛏️  Loading full filtered day (as strings, epochs computed in JS)...');
-    const trips = await loadDay(con, day);
+    const allTrips = await loadDay(con, day);
+    const trips = allTrips.filter((t) => rideInScope(t.lng, t.lat, t.endLng, t.endLat));
     if (!trips.length) throw new Error('❌ No trips loaded for the chosen day.');
-    console.log(`   Loaded ${trips.length} filtered-valid trips.`);
+    console.log(`   Loaded ${allTrips.length} filtered-valid trips; ${trips.length} start or end in ${SCOPE}.`);
     verifyEpochParity(trips);
 
     // day-stats
-    const dayStats = { ...computeDayStats(trips, day), ...computeStoryStats(trips, day) };
+    const dayStats = { scope: SCOPE, ...computeDayStats(trips, day), ...computeStoryStats(trips, day) };
     if (Math.max(...dayStats.activeByMinute.values) !== dayStats.peakActive) {
         throw new Error('❌ activeByMinute peak does not match peakActive.');
     }
