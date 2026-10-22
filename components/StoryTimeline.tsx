@@ -1,13 +1,9 @@
 import React from 'react';
 
-// Shape of /data/day-stats.json (see MapViewport data fetching).
-export interface DayStats {
-  date: string;        // ISO date, e.g. "2026-06-10"
-  totalTrips: number;
-  peakMinute: string;  // e.g. "08:45"
-  peakEpochMs: number;
-  peakActive: number;
-}
+import type { DayStats } from '@/lib/clip/story';
+
+// Shape of /data/day-stats.json lives with the clip's story code.
+export type { DayStats };
 
 interface StoryTimelineProps {
   minTime: number;
@@ -64,11 +60,6 @@ export default function StoryTimeline({
             <p className="text-xs text-slate-400 font-medium tracking-wide">
               {storyLabel}
             </p>
-            {dayStats && (
-              <p className="text-[10px] text-slate-500 font-medium tracking-wide mt-0.5">
-                Peak: {dayStats.peakActive} bikes in motion at {formatTime(dayStats.peakEpochMs)}
-              </p>
-            )}
             <p className="text-[10px] text-slate-500 tracking-wide mt-0.5">
               Routes are OSRM-estimated bicycle paths, not GPS traces
             </p>
