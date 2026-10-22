@@ -53,7 +53,9 @@ export class LiteRenderer {
     const bearing = ((landscape ? -61 : 29) * Math.PI) / 180;
     const cb = Math.cos(bearing);
     const sb = Math.sin(bearing);
-    const k = Math.max(W, H) / SPAN_M;  // CSS px per metre
+    // CSS px per metre. A square frame zooms in a little so the island fills it.
+    const square = Math.abs(W - H) < 0.15 * Math.max(W, H);
+    const k = (Math.max(W, H) / SPAN_M) * (square ? 1.3 : 1);
     const x0 = toX(CENTER_LNG), y0 = toY(CENTER_LAT);
     const cx = x0 * cb - y0 * sb, cy = x0 * sb + y0 * cb;
 
