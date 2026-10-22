@@ -1,129 +1,130 @@
 {
   "format": "cbr1",
+  "scope": "manhattan",
   "date": "2026-09-18",
   "dayStartEpochMs": 1789704000000,
-  "totalRides": 211680,
+  "totalRides": 138187,
   "fallbackRides": 0,
   "hours": [
     {
       "hour": 0,
-      "rides": 2985,
-      "bytes": 117053
+      "rides": 1761,
+      "bytes": 70271
     },
     {
       "hour": 1,
-      "rides": 1762,
-      "bytes": 67175
+      "rides": 940,
+      "bytes": 37534
     },
     {
       "hour": 2,
-      "rides": 975,
-      "bytes": 38842
+      "rides": 575,
+      "bytes": 23276
     },
     {
       "hour": 3,
-      "rides": 610,
-      "bytes": 24818
+      "rides": 357,
+      "bytes": 15029
     },
     {
       "hour": 4,
-      "rides": 646,
-      "bytes": 25936
+      "rides": 378,
+      "bytes": 15975
     },
     {
       "hour": 5,
-      "rides": 1589,
-      "bytes": 62629
+      "rides": 1025,
+      "bytes": 40530
     },
     {
       "hour": 6,
-      "rides": 4256,
-      "bytes": 166573
+      "rides": 2941,
+      "bytes": 113331
     },
     {
       "hour": 7,
-      "rides": 9433,
-      "bytes": 367484
+      "rides": 6191,
+      "bytes": 236717
     },
     {
       "hour": 8,
-      "rides": 13478,
-      "bytes": 512268
+      "rides": 9188,
+      "bytes": 344168
     },
     {
       "hour": 9,
-      "rides": 10563,
-      "bytes": 388068
+      "rides": 7183,
+      "bytes": 258779
     },
     {
       "hour": 10,
-      "rides": 8383,
-      "bytes": 308135
+      "rides": 5431,
+      "bytes": 197759
     },
     {
       "hour": 11,
-      "rides": 8571,
-      "bytes": 314455
+      "rides": 5671,
+      "bytes": 206392
     },
     {
       "hour": 12,
-      "rides": 9727,
-      "bytes": 355296
+      "rides": 6418,
+      "bytes": 233184
     },
     {
       "hour": 13,
-      "rides": 10540,
-      "bytes": 385157
+      "rides": 6960,
+      "bytes": 252544
     },
     {
       "hour": 14,
-      "rides": 12254,
-      "bytes": 460313
+      "rides": 8046,
+      "bytes": 298633
     },
     {
       "hour": 15,
-      "rides": 13681,
-      "bytes": 522726
+      "rides": 9050,
+      "bytes": 342153
     },
     {
       "hour": 16,
-      "rides": 16041,
-      "bytes": 620180
+      "rides": 10758,
+      "bytes": 411789
     },
     {
       "hour": 17,
-      "rides": 19651,
-      "bytes": 765747
+      "rides": 13277,
+      "bytes": 515045
     },
     {
       "hour": 18,
-      "rides": 19082,
-      "bytes": 740997
+      "rides": 12312,
+      "bytes": 473283
     },
     {
       "hour": 19,
-      "rides": 14899,
-      "bytes": 572227
+      "rides": 9438,
+      "bytes": 360167
     },
     {
       "hour": 20,
-      "rides": 10122,
-      "bytes": 385698
+      "rides": 6316,
+      "bytes": 239167
     },
     {
       "hour": 21,
-      "rides": 8122,
-      "bytes": 316923
+      "rides": 5065,
+      "bytes": 197057
     },
     {
       "hour": 22,
-      "rides": 7634,
-      "bytes": 295906
+      "rides": 4781,
+      "bytes": 181362
     },
     {
       "hour": 23,
-      "rides": 6675,
-      "bytes": 256918
+      "rides": 4125,
+      "bytes": 157411
     }
   ]
 }
