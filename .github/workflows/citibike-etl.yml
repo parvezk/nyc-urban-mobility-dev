@@ -1,0 +1,113 @@
+# Citi Bike ETL: builds the days the map shows, entirely in the cloud.
+#
+# 1. Finds the latest monthly Citi Bike file (s3.amazonaws.com/tripdata) and
+#    picks two days: a typical midweek day ("Watch New York wake up") and the
+#    busiest day of the month.
+# 2. Builds an OSRM bicycle routing graph for NYC from OpenStreetMap and runs
+#    it in Docker on the runner (cached per month).
+# 3. Samples, routes and summarises each day, then commits
+#    public/data/days/ back to the branch it ran on. Vercel deploys from there.
+#
+# Run it from the Actions tab ("Run workflow"), optionally with a month.
+name: Citi Bike ETL
+
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Month as YYYYMM (leave blank for the latest published month)"
+        required: false
+        default: ""
+  push:
+    branches: [claude/project-thread-fv3yk8]
+    paths:
+      - ".github/workflows/citibike-etl.yml"
+      - "scripts/etl/**"
+  # Monthly refresh. Citi Bike posts the previous month in the first week.
+  # Turn on once the first run has been reviewed:
+  # schedule:
+  #   - cron: "0 14 8 * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: citibike-etl-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OSRM_IMAGE: ghcr.io/project-osrm/osrm-backend:v5.27.1
+      # NYC bounding box, matching the trip filter in scripts/etl/lib/paths.mjs
+      NYC_BBOX: "-74.3,40.5,-73.6,41.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install ETL dependencies
+        # Only DuckDB is needed; install it next to the scripts instead of the
+        # whole app.
+        run: npm install --prefix scripts/etl --no-save --no-package-lock --no-audit --no-fund @duckdb/node-api@1.5.2-r.1
+
+      - name: Pick month and days, download Citi Bike data
+        id: month
+        run: node scripts/etl/0-fetch-month.mjs ${{ inputs.month && format('--month {0}', inputs.month) || '' }}
+
+      - name: Restore cached OSRM graph
+        id: osrm-cache
+        uses: actions/cache@v4
+        with:
+          path: osrm
+          key: osrm-nyc-bicycle-v5.27.1-${{ steps.month.outputs.month }}
+
+      - name: Build OSRM bicycle graph for NYC
+        if: steps.osrm-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+          mkdir -p osrm
+          curl -fsSL --retry 3 -o ny.osm.pbf https://download.geofabrik.de/north-america/us/new-york-latest.osm.pbf
+          osmium extract --bbox "$NYC_BBOX" ny.osm.pbf -o osrm/nyc.osm.pbf --overwrite
+          rm ny.osm.pbf
+          docker run --rm -v "$PWD/osrm:/data" "$OSRM_IMAGE" osrm-extract -p /opt/bicycle.lua /data/nyc.osm.pbf
+          docker run --rm -v "$PWD/osrm:/data" "$OSRM_IMAGE" osrm-partition /data/nyc.osrm
+          docker run --rm -v "$PWD/osrm:/data" "$OSRM_IMAGE" osrm-customize /data/nyc.osrm
+
+      - name: Start OSRM
+        run: |
+          docker run -d --name osrm -p 5000:5000 -v "$PWD/osrm:/data" "$OSRM_IMAGE" \
+            osrm-routed --algorithm mld /data/nyc.osrm
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:5000/route/v1/bicycle/-73.99,40.73;-73.98,40.75?overview=false" > /dev/null; then
+              echo "OSRM is up"; exit 0
+            fi
+            sleep 2
+          done
+          docker logs osrm; exit 1
+
+      - name: Build each day
+        run: |
+          for d in ${{ steps.month.outputs.dates }}; do
+            echo "::group::$d"
+            node scripts/etl/1-aggregate-remote-duckdb.mjs --date "$d"
+            node scripts/etl/2-osrm-routing.mjs --date "$d"
+            node scripts/etl/4-hotspot-stats.mjs --date "$d"
+            echo "::endgroup::"
+          done
+          node scripts/etl/5-build-index.mjs
+          du -sh public/data/days/*
+
+      - name: Commit data to ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A public/data/days
+          if git diff --cached --quiet; then echo "No data changes."; exit 0; fi
+          git commit -m "data: Citi Bike ${{ steps.month.outputs.month }} days (${{ steps.month.outputs.dates }})"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"
