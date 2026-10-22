@@ -83,17 +83,17 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
   return (
     <section
       aria-label="One day of Citi Bike, at a glance"
-      className="absolute top-4 left-4 z-50 w-[320px] max-w-[calc(100vw-2rem)] bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl text-white"
+      className="absolute top-4 left-4 z-50 w-[320px] max-w-[calc(100vw-2rem)] bg-[#FAFAF8]/90 backdrop-blur-xl border border-black/5 rounded-2xl shadow-[0_10px_40px_rgba(20,22,30,0.14)] text-slate-900"
     >
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
         <div>
-          <h1 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">One day of Citi Bike</h1>
+          <h1 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">One day of Citi Bike</h1>
           <p className="text-lg font-bold leading-tight mt-1">{formatStoryDate(stats.date)}</p>
         </div>
         <button
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="shrink-0 h-8 px-3 rounded-full bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="shrink-0 h-8 px-3 rounded-full bg-black/5 hover:bg-black/10 text-xs font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
         >
           {open ? 'Hide' : 'Stats'}
         </button>
@@ -111,14 +111,14 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
                 aria-label="Bikes in motion from 3 AM to midnight"
                 className="block w-full h-auto overflow-visible"
               >
-                <path d={spark.area} fill="rgba(255,166,72,0.16)" />
-                <path d={spark.line} fill="none" stroke="#FFA648" strokeWidth={1.6} strokeLinejoin="round" />
-                <line x1={nowX} x2={nowX} y1={-4} y2={SPARK_H} stroke="rgba(255,255,255,0.55)" strokeWidth={1} />
+                <path d={spark.area} fill="rgba(58,85,224,0.14)" />
+                <path d={spark.line} fill="none" stroke="#3A55E0" strokeWidth={1.6} strokeLinejoin="round" />
+                <line x1={nowX} x2={nowX} y1={-4} y2={SPARK_H} stroke="rgba(15,23,42,0.55)" strokeWidth={1} />
                 {spark.marks.map((m, i) => (
-                  <circle key={i} cx={m.cx} cy={m.cy} r={3} fill="#ffffff" />
+                  <circle key={i} cx={m.cx} cy={m.cy} r={3} fill="#0f172a" />
                 ))}
               </svg>
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1">
                 <span>3 AM</span>
                 <span>Noon</span>
                 <span>Midnight</span>
@@ -130,11 +130,11 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
             {rows.map(r => {
               const content = (
                 <>
-                  <span className="text-slate-400">{r.label}</span>
+                  <span className="text-slate-500">{r.label}</span>
                   <span className="text-right">
-                    <span className="font-bold tabular-nums text-white">{r.value}</span>
-                    {r.unit && <span className="text-slate-300"> {r.unit}</span>}
-                    {r.detail && <span className="text-slate-300"> · {r.detail}</span>}
+                    <span className="font-bold tabular-nums text-slate-900">{r.value}</span>
+                    {r.unit && <span className="text-slate-600"> {r.unit}</span>}
+                    {r.detail && <span className="text-slate-600"> · {r.detail}</span>}
                   </span>
                 </>
               );
@@ -143,12 +143,12 @@ export default function DayStatsPanel({ stats, currentTime, onJump }: DayStatsPa
                   key={r.label}
                   onClick={() => onJump(r.jumpTo as number)}
                   title={`Jump to ${formatClock(r.jumpTo)}`}
-                  className="w-full flex justify-between items-baseline gap-3 py-1.5 border-t border-white/5 text-left hover:bg-white/5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  className="w-full flex justify-between items-baseline gap-3 py-1.5 border-t border-black/5 text-left hover:bg-black/5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 >
                   {content}
                 </button>
               ) : (
-                <div key={r.label} className="flex justify-between items-baseline gap-3 py-1.5 border-t border-white/5">
+                <div key={r.label} className="flex justify-between items-baseline gap-3 py-1.5 border-t border-black/5">
                   {content}
                 </div>
               );

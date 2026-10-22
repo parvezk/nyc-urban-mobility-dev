@@ -26,7 +26,7 @@ function Segmented<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex gap-1 rounded-xl bg-slate-800/70 p-1">
+    <div role="radiogroup" aria-label={label} className="flex gap-1 rounded-xl bg-black/5 p-1">
       {options.map(o => {
         const active = o.value === value;
         return (
@@ -37,7 +37,7 @@ function Segmented<T extends string>({
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={`flex-1 rounded-lg px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 ${
-              active ? 'bg-slate-200 text-slate-900' : 'text-slate-300 hover:bg-slate-700/70'
+              active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-black/5'
             }`}
           >
             <span className="flex items-center gap-1.5 font-medium">
@@ -99,15 +99,15 @@ export default function ViewControls({ index, currentDate, stats, shown, total, 
   const members = pct(stats?.memberShare);
 
   return (
-    <div className="absolute top-4 right-4 z-50 w-[300px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-700/60 bg-slate-900/80 p-4 text-white shadow-2xl backdrop-blur-xl flex flex-col gap-4">
+    <div className="absolute top-4 right-4 z-50 w-[300px] max-w-[calc(100vw-2rem)] rounded-2xl border border-black/5 bg-[#FAFAF8]/90 p-4 text-slate-900 shadow-[0_10px_40px_rgba(20,22,30,0.14)] backdrop-blur-xl flex flex-col gap-4">
       {dayOptions.length > 1 && currentDate && (
         <section className="flex flex-col gap-1.5">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             Day{index?.monthLabel ? ` · ${index.monthLabel}` : ''}
           </h3>
           <Segmented label="Day" value={currentDate} options={dayOptions} onChange={setDay} />
           {busiest?.totalTrips != null && currentDate === presets.busiest && (
-            <p className="text-[10px] text-slate-400">
+            <p className="text-[10px] text-slate-500">
               {busiest.totalTrips.toLocaleString('en-US')} rides, the most of any day this month
             </p>
           )}
@@ -115,16 +115,16 @@ export default function ViewControls({ index, currentDate, stats, shown, total, 
       )}
 
       <section className="flex flex-col gap-1.5">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Bike type</h3>
+        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Bike type</h3>
         <Segmented label="Bike type" value={bike} options={bikeOptions} onChange={setBike} />
-        {ebike && <p className="text-[10px] text-slate-400">E-bikes carried {ebike} of the day&apos;s rides</p>}
+        {ebike && <p className="text-[10px] text-slate-500">E-bikes carried {ebike} of the day&apos;s rides</p>}
       </section>
 
       {hasRiderData && (
         <section className="flex flex-col gap-1.5">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Rider</h3>
+          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Rider</h3>
           <Segmented label="Rider" value={rider} options={riderOptions} onChange={setRider} />
-          {members && <p className="text-[10px] text-slate-400">Annual members took {members} of rides</p>}
+          {members && <p className="text-[10px] text-slate-500">Annual members took {members} of rides</p>}
         </section>
       )}
 

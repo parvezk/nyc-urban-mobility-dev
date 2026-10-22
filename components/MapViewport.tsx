@@ -3,14 +3,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import DeckGL from '@deck.gl/react';
 import { TripsLayer } from '@deck.gl/geo-layers';
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
-import MapGL, { Popup } from 'react-map-gl/maplibre';
+import { ScatterplotLayer } from '@deck.gl/layers';
+import MapGL, { Popup, type MapRef } from 'react-map-gl/maplibre';
 import { FlyToInterpolator } from '@deck.gl/core';
 import StoryTimeline, { DayStats } from './StoryTimeline';
 import DayStatsPanel from './DayStatsPanel';
-import ViewControls, { CLASSIC_RGB, EBIKE_RGB } from './ViewControls';
+import ViewControls from './ViewControls';
 import { DaysIndex, DaySources, loadDaysIndex, resolveDayFrom } from '@/lib/dayData';
 import { matchesFilters, useViewStore } from '@/lib/store/viewStore';
+import { MAP_STYLE, applySunLook, prepareMap, tripColorsAt } from '@/lib/lighting/mapLook';
+import { daylightAt, nyMidnight } from '@/lib/lighting/sun';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -21,8 +23,6 @@ const INITIAL_VIEW_STATE = {
   pitch: 60,
   bearing: 0
 };
-
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 // A single animated trip path: [lng, lat, epochMs] waypoints.
 interface TripPath {
@@ -78,7 +78,6 @@ export default function MapViewport() {
   // The hotspot cluster the user has clicked into (drives Popup + fly-to).
   const [selectedCluster, setSelectedCluster] = useState<PulseDatum | null>(null);
 
-  const [buildings, setBuildings] = useState<any[]>([]);
   const [trips, setTrips] = useState<TripPath[]>([]);
   const [hotspots, setHotspots] = useState<HotspotsData | null>(null);
   const [dayStats, setDayStats] = useState<DayStats | null>(null);
@@ -101,10 +100,6 @@ export default function MapViewport() {
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('day');
     if (requested) setDay(requested);
-
-    fetch('/data/buildings.json')
-      .then(res => res.json())
-      .then(data => setBuildings(data));
 
     loadDaysIndex().then(setDaysIndex);
   }, [setDay]);
@@ -316,17 +311,22 @@ export default function MapViewport() {
     return cluster?.counts.get(currentBucketEpoch) ?? 0;
   }, [selectedCluster, hotspotLookup, currentBucketEpoch]);
 
+  // 5. Sun-driven look: the basemap, 3D buildings and trip colours follow the
+  // real sun for the shown date. Lit windows switch on after dark.
+  const mapRef = useRef<MapRef>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const shownDate = sources?.date ?? dayStats?.date ?? null;
+  const dayStart = useMemo(() => (shownDate ? nyMidnight(shownDate) : null), [shownDate]);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!mapReady || !map || dayStart === null || time === 0) return;
+    applySunLook(map, time, (time - dayStart) / 3_600_000);
+  }, [mapReady, time, dayStart]);
+  // Quantised so trip colours only re-upload when the light visibly changes.
+  const lightStep = Math.round(time / 300_000);
+  const tripLook = useMemo(() => tripColorsAt(daylightAt(lightStep * 300_000)), [lightStep]);
+
   const layers = [
-    new PolygonLayer({
-      id: 'buildings',
-      data: buildings,
-      extruded: true,
-      wireframe: false,
-      opacity: 0.5,
-      getPolygon: (f: any) => f.polygon,
-      getElevation: (f: any) => f.height,
-      getFillColor: [74, 80, 87]
-    }),
     new TripsLayer({
       id: 'trips',
       data: visibleTrips,
@@ -335,9 +335,14 @@ export default function MapViewport() {
       // getTimestamps returns the 3rd element (the epoch ms) from each waypoint
       getTimestamps: (d: any) => d.path.map((pt: any) => pt[2]),
       // electric_bike -> teal; classic_bike (and any other value) -> orange
-      getColor: (d: any) => (d.vendor_type === 'electric_bike' ? EBIKE_RGB : CLASSIC_RGB),
-      opacity: 0.8,
-      widthMinPixels: 3,
+      getColor: (d: any) => (d.vendor_type === 'electric_bike' ? tripLook.ebike : tripLook.classic),
+      opacity: 0.85,
+      widthMinPixels: 2.5,
+      // Glow where rides overlap after dark; plain blending on the light day map.
+      parameters: tripLook.additive
+        ? { blend: true, blendColorOperation: 'add', blendColorSrcFactor: 'src-alpha', blendColorDstFactor: 'one', blendAlphaOperation: 'add', blendAlphaSrcFactor: 'one', blendAlphaDstFactor: 'one-minus-src-alpha', depthWriteEnabled: false }
+        : { depthWriteEnabled: false },
+      updateTriggers: { getColor: [tripLook.ebike, tripLook.classic] },
       jointRounded: true,
       capRounded: true,
       fadeTrail: true,
@@ -376,7 +381,11 @@ export default function MapViewport() {
         layers={layers}
         pickingRadius={20}
       >
-        <MapGL mapStyle={MAP_STYLE}>
+        <MapGL
+          ref={mapRef}
+          mapStyle={MAP_STYLE}
+          onLoad={e => { prepareMap(e.target); setMapReady(true); }}
+        >
           {selectedCluster && (
             <Popup
               longitude={selectedCluster.lng}
