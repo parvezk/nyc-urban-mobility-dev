@@ -38,6 +38,8 @@ import zlib from 'zlib';
 import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
 import { csvGlob, dayDir, monthOf, parseArgs, requireDate, tripFilterSql } from './lib/paths.mjs';
 
+import { SCOPE, rideInScope } from './lib/scope.mjs';
+
 const OSRM_BASE = process.env.OSRM_BASE || 'http://localhost:5000/route/v1/bicycle';
 const CONCURRENCY = Number.parseInt(process.env.OSRM_CONCURRENCY, 10) || 32;
 const TOLERANCE_M = 12;
@@ -62,7 +64,9 @@ async function loadRides() {
         WHERE ${tripFilterSql(DAY)}
         ORDER BY started_at
     `);
-    return reader.getRowObjects().map((r) => ({
+    return reader.getRowObjects()
+        .filter((r) => rideInScope(bn(r.start_lng), bn(r.start_lat), bn(r.end_lng), bn(r.end_lat)))
+        .map((r) => ({
         electric: Boolean(r.electric),
         member: Boolean(r.member),
         startMs: nyWallClockToEpochMs(String(r.started_at)),
@@ -175,7 +179,7 @@ function pointTimes(q, startSec, durSec) {
 }
 
 function encodeRide(ride, q, dayStartMs) {
-    const startSec = Math.round((ride.startMs - dayStartMs) / 1000);
+    const startSec = Math.floor((ride.startMs - dayStartMs) / 1000); // floor: 23:59:59.6 must stay in hour 23
     const durSec = Math.max(1, Math.round((ride.endMs - ride.startMs) / 1000));
     const times = pointTimes(q, startSec, durSec);
     const n = q.length;
@@ -199,7 +203,7 @@ async function main() {
     console.log(`🦆 Loading every filtered ride on ${DAY} ...`);
     const rides = await loadRides();
     if (!rides.length) throw new Error(`❌ No rides for ${DAY}. Did Stage 0 download that month?`);
-    console.log(`   ${rides.length} rides`);
+    console.log(`   ${rides.length} rides start or end in ${SCOPE}`);
 
     const encoded = new Array(rides.length);
     let fallback = 0, next = 0, done = 0;
@@ -245,6 +249,7 @@ async function main() {
     }
     const manifest = {
         format: 'cbr1',
+        scope: SCOPE,
         date: DAY,
         dayStartEpochMs: dayStartMs,
         totalRides: rides.length,
