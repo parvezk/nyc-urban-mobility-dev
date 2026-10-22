@@ -13,6 +13,7 @@ import {
 } from '@/lib/clip/story';
 import { clipThemeAt } from '@/lib/clip/theme';
 import ClipOverlay from './ClipOverlay';
+import { loadDayStats, resolveDay } from '@/lib/dayData';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -45,9 +46,10 @@ const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => r()))
 interface ClipStageProps {
   format: ClipFormat;
   record: boolean;
+  day?: string;   // a date or a preset name ("busiest"); empty = the default day
 }
 
-export default function ClipStage({ format, record }: ClipStageProps) {
+export default function ClipStage({ format, record, day }: ClipStageProps) {
   const spec = FORMATS[format];
   const frame = useClipClock(s => s.frame);
   const setFrame = useClipClock(s => s.setFrame);
@@ -65,12 +67,14 @@ export default function ClipStage({ format, record }: ClipStageProps) {
 
   // 1. Data
   useEffect(() => {
-    fetch('/data/day-stats.json').then(r => r.json()).then((d: DayStats) => setStats(d));
     fetch('/data/buildings.json').then(r => r.json()).then((d: Building[]) => setBuildings(d));
-    fetch('/api/trips').then(r => r.json()).then((d: TripPath[]) => {
-      if (Array.isArray(d)) setTrips(d);
+    resolveDay(day).then(sources => {
+      loadDayStats(sources).then(setStats);
+      fetch(sources.tripsUrl).then(r => r.json()).then((d: TripPath[]) => {
+        if (Array.isArray(d)) setTrips(d);
+      });
     });
-  }, []);
+  }, [day]);
 
   // 2. Keep framing identical at any preview size.
   useEffect(() => {
@@ -218,7 +222,7 @@ export default function ClipStage({ format, record }: ClipStageProps) {
       {!record && (
         <div className="fixed bottom-3 right-3 flex gap-2 text-xs text-white/70 font-mono">
           {(Object.keys(FORMATS) as ClipFormat[]).map(f => (
-            <a key={f} href={`/clip?format=${f}`} className={`px-2 py-1 rounded ${f === format ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}>
+            <a key={f} href={`/clip?format=${f}${day ? `&day=${encodeURIComponent(day)}` : ''}`} className={`px-2 py-1 rounded ${f === format ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}>
               {f.replace('x', ':')}
             </a>
           ))}

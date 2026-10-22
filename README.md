@@ -104,7 +104,7 @@ Then open [http://localhost:3000](http://localhost:3000).
 
 An 8-second, seamless loop of the "Watch New York wake up" story, made for X, LinkedIn, Threads and Substack.
 
-- **Preview:** open `/clip` (vertical 9:16), `/clip?format=1x1` or `/clip?format=16x9`.
+- **Preview:** open `/clip` (vertical 9:16), `/clip?format=1x1` or `/clip?format=16x9`. Add `&day=2026-09-17` or `&day=busiest` to pick a day once per-day data exists (`lib/dayData.ts`).
 - **Beats:** the quietest minute of the night (hook) → the morning wake-up → the evening peak → an end card with the day's rides and a distance comparison. The beat sheet lives in `lib/clip/story.ts`, and the look (basemap, colors, text) lives in `lib/clip/theme.ts`.
 - **Numbers** come from `public/data/day-stats.json`, written by ETL stage 4 (`nightLow`, `morningPeak`, `straightLineKm`, `activeByMinute`), so nothing is hardcoded for one day.
 - **Export to MP4** (run on a machine with a GPU, needs ffmpeg):
@@ -112,7 +112,7 @@ An 8-second, seamless loop of the "Watch New York wake up" story, made for X, Li
 ```bash
 npm run build && npm start            # in one terminal
 npm i --no-save playwright && npx playwright install chromium
-node scripts/record-clip.mjs          # writes out/clips/wake-up-{9x16,1x1,16x9}.mp4
+node scripts/record-clip.mjs          # writes out/clips/one-day-of-citi-bike-{9x16,1x1,16x9}.mp4
 ```
 
 The recorder steps through the frames one by one, so the output is identical on every run.

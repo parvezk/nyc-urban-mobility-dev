@@ -14,6 +14,7 @@
  * Usage:
  *   node scripts/record-clip.mjs                       # 9x16, 1x1 and 16x9
  *   node scripts/record-clip.mjs --format 9x16
+ *   node scripts/record-clip.mjs --day busiest          # a date or preset from data/days/index.json
  *   node scripts/record-clip.mjs --url http://localhost:3000 --out out/clips
  */
 import { spawn } from 'node:child_process';
@@ -30,6 +31,7 @@ function arg(name, fallback) {
 const baseUrl = arg('url', 'http://localhost:3000');
 const outDir = arg('out', path.join('out', 'clips'));
 const formatArg = arg('format', 'all');
+const day = arg('day', '');
 const formats = formatArg === 'all' ? Object.keys(SIZES) : [formatArg];
 for (const f of formats) {
   if (!SIZES[f]) throw new Error(`Unknown format "${f}". Use 9x16, 1x1, 16x9 or all.`);
@@ -57,13 +59,13 @@ try {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     page.on('pageerror', e => console.warn(`  page error: ${e.message}`));
 
-    await page.goto(`${baseUrl}/clip?format=${format}&record=1`);
+    await page.goto(`${baseUrl}/clip?format=${format}&record=1${day ? `&day=${encodeURIComponent(day)}` : ''}`);
     await page.waitForFunction(() => window.__clip?.isReady(), null, { timeout: 120000 });
     // Hide the Next.js dev badge if this is a dev server.
     await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
 
     const { frames, fps } = await page.evaluate(() => ({ frames: window.__clip.frames, fps: window.__clip.fps }));
-    const outFile = path.join(outDir, `wake-up-${format}.mp4`);
+    const outFile = path.join(outDir, `one-day-of-citi-bike${day ? `-${day}` : ''}-${format}.mp4`);
     console.log(`🎬 ${format}: ${frames} frames at ${fps} fps -> ${outFile}`);
 
     const ffmpeg = spawn('ffmpeg', [
