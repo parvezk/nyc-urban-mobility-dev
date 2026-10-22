@@ -77,6 +77,8 @@ jobs:
           docker run --rm -v "$PWD/osrm:/data" "$OSRM_IMAGE" osrm-extract -p /opt/bicycle.lua /data/nyc.osm.pbf
           docker run --rm -v "$PWD/osrm:/data" "$OSRM_IMAGE" osrm-partition /data/nyc.osrm
           docker run --rm -v "$PWD/osrm:/data" "$OSRM_IMAGE" osrm-customize /data/nyc.osrm
+          # Docker writes the graph as root; hand it back so actions/cache can save it.
+          sudo chown -R "$(id -u):$(id -g)" osrm
 
       - name: Start OSRM
         run: |
