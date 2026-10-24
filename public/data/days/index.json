@@ -1,0 +1,26 @@
+{
+  "month": "202609",
+  "monthLabel": "September 2026",
+  "source": "https://s3.amazonaws.com/tripdata/202609-citibike-tripdata.zip",
+  "generatedAt": "2026-10-22T17:45:09.704Z",
+  "presets": {
+    "default": "2026-09-23",
+    "busiest": "2026-09-18"
+  },
+  "days": [
+    {
+      "date": "2026-09-18",
+      "weekday": "Friday",
+      "totalTrips": 138187,
+      "peakActive": 3388,
+      "peakMinute": "17:36"
+    },
+    {
+      "date": "2026-09-23",
+      "weekday": "Wednesday",
+      "totalTrips": 124300,
+      "peakActive": 3276,
+      "peakMinute": "17:42"
+    }
+  ]
+}

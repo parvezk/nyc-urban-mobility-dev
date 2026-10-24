@@ -5,11 +5,15 @@
  * Runs over the ENTIRE chosen day (not the 6k Stage-1 sample), reading the
  * Citi Bike CSVs directly through DuckDB.
  *
- * Emits:
- *   public/data/day-stats.json  { date, totalTrips, peakMinute, peakEpochMs, peakActive,
+ *   node scripts/etl/4-hotspot-stats.mjs --date 2026-09-16
+ *
+ * Emits (into public/data/days/<date>/):
+ *   day-stats.json  { date, totalTrips, peakMinute, peakEpochMs, peakActive,
  *                                 nightLow, morningPeak, straightLineKm, ebikeShare,
- *                                 medianRideMinutes, medianRideKm, activeByMinute }
- *   public/data/hotspots.json   { bucketMs, clusters:[{ lng, lat, name, counts:[[bucketEpochMs, activeCount],…] }] }
+ *                                 medianRideMinutes, medianRideKm, memberShare, activeByMinute }
+ *   landmarks.json  [{ id, name, lng, lat, radiusM, hourly:[{hour, electric, classic}]×24,
+ *                      busiestHour:{hour, electric, classic, total} }]
+ *   hotspots.json   { bucketMs, clusters:[{ lng, lat, name, counts:[[bucketEpochMs, activeCount],…] }] }
  *
  * --- TIMEZONE / EPOCH PARITY (critical) ------------------------------------
  * Stage 2 turns each trip time into an epoch via `nyWallClockToEpochMs()`
@@ -26,20 +30,23 @@
  * in-memory sweep is trivial.
  * We assert the parity at the end (peakEpochMs formats back to peakMinute).
  *
- * The date is derived from Stage 1's output_centroids.json (first pickup_time)
- * so the two stages can never drift onto different days. Run order: 1 && 4.
+ * Both Stage 1 and this stage take the same --date and share the row filter
+ * in lib/paths.mjs, so they can't drift onto different days or rows.
  * ---------------------------------------------------------------------------
  */
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
 import path from 'path';
 import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
+import { SCOPE, rideInScope } from './lib/scope.mjs';
+import { csvGlob, dayDir, monthOf, parseArgs, requireDate, tripFilterSql } from './lib/paths.mjs';
+import { LANDMARKS, RADIUS_M, metresBetween } from './lib/landmarks.mjs';
 
-const ETL_DIR = path.join(process.cwd(), 'scripts', 'etl');
-const CSV_GLOB = path.join(ETL_DIR, '202606', '*.csv');
-const CENTROIDS_PATH = path.join(ETL_DIR, 'output_centroids.json');
-const DAY_STATS_PATH = path.join(process.cwd(), 'public', 'data', 'day-stats.json');
-const HOTSPOTS_PATH = path.join(process.cwd(), 'public', 'data', 'hotspots.json');
+const DAY = requireDate(parseArgs());
+const CSV_GLOB = csvGlob(monthOf(DAY));
+const DAY_STATS_PATH = path.join(dayDir(DAY), 'day-stats.json');
+const HOTSPOTS_PATH = path.join(dayDir(DAY), 'hotspots.json');
+const LANDMARKS_PATH = path.join(dayDir(DAY), 'landmarks.json');
 
 const BUCKET_MS = 300000;      // 5-minute buckets
 const GRID_DEG = 0.005;        // ~0.5 km grid cell for clustering start stations
@@ -48,22 +55,6 @@ const HOTSPOTS_SIZE_LIMIT = 200 * 1024; // target < 200 KB (200 KiB) — keep as
 
 const bn = (v) => (typeof v === 'bigint' ? Number(v) : v);
 
-// Derive the chosen day from Stage 1's output (no cross-file constant to drift).
-function chosenDay() {
-    if (!fs.existsSync(CENTROIDS_PATH)) {
-        throw new Error(`❌ ${CENTROIDS_PATH} missing — run 1-aggregate-remote-duckdb.mjs first.`);
-    }
-    const centroids = JSON.parse(fs.readFileSync(CENTROIDS_PATH, 'utf8'));
-    if (!Array.isArray(centroids) || !centroids.length) {
-        throw new Error('❌ output_centroids.json is empty.');
-    }
-    const day = String(centroids[0].pickup_time).slice(0, 10); // YYYY-MM-DD
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-        throw new Error(`❌ Could not derive a valid day from pickup_time="${centroids[0].pickup_time}".`);
-    }
-    return day;
-}
-
 // Pull the full filtered day as strings (same filters as Stage 1). Epochs are
 // computed in JS below, NOT in SQL — see the timezone note above.
 async function loadDay(con, day) {
@@ -71,15 +62,10 @@ async function loadDay(con, day) {
         SELECT strftime(started_at, '%Y-%m-%dT%H:%M:%S.%g') AS started_at,
                strftime(ended_at,   '%Y-%m-%dT%H:%M:%S.%g') AS ended_at,
                start_station_name                          AS station,
-               rideable_type,
+               rideable_type, member_casual,
                start_lat, start_lng, end_lat, end_lng
         FROM read_csv_auto('${CSV_GLOB}', union_by_name=true)
-        WHERE CAST(started_at AS DATE) = DATE '${day}'
-          AND start_lat IS NOT NULL AND start_lng IS NOT NULL
-          AND end_lat   IS NOT NULL AND end_lng   IS NOT NULL
-          AND date_diff('second', started_at, ended_at) BETWEEN 60 AND 14400
-          AND start_lat BETWEEN 40.5 AND 41.0 AND end_lat BETWEEN 40.5 AND 41.0
-          AND start_lng BETWEEN -74.3 AND -73.6 AND end_lng BETWEEN -74.3 AND -73.6
+        WHERE ${tripFilterSql(day)}
     `;
     const reader = await con.runAndReadAll(query);
     return reader.getRowObjects().map((r) => {
@@ -92,6 +78,7 @@ async function loadDay(con, day) {
             lat: bn(r.start_lat), lng: bn(r.start_lng),
             endLat: bn(r.end_lat), endLng: bn(r.end_lng),
             electric: String(r.rideable_type) === 'electric_bike',
+            member: String(r.member_casual) === 'member',
         };
     });
 }
@@ -211,7 +198,7 @@ function computeStoryStats(trips, day) {
         return { minute: nyHHMM(epochMs), epochMs, active: values[best] };
     };
 
-    let straightLineKm = 0, electric = 0;
+    let straightLineKm = 0, electric = 0, members = 0;
     const kms = [], minutes = [];
     for (const t of trips) {
         const km = haversineKm(t.lat, t.lng, t.endLat, t.endLng);
@@ -219,6 +206,7 @@ function computeStoryStats(trips, day) {
         kms.push(km);
         minutes.push((t.endMs - t.startMs) / 60000);
         if (t.electric) electric += 1;
+        if (t.member) members += 1;
     }
     const median = (xs) => {
         const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2);
@@ -230,10 +218,37 @@ function computeStoryStats(trips, day) {
         morningPeak: pick(5, 11, (a, b) => a > b),
         straightLineKm: Math.round(straightLineKm),
         ebikeShare: +(electric / trips.length).toFixed(4),
+        memberShare: +(members / trips.length).toFixed(4),
         medianRideMinutes: +median(minutes).toFixed(1),
         medianRideKm: +median(kms).toFixed(2),
         activeByMinute: { startEpochMs: dayStartMs, stepMs: 60000, values },
     };
+}
+
+// --- landmarks: rides starting or ending near each place, by local hour ------
+// A ride counts once per landmark: at its start hour if it starts nearby,
+// otherwise at its end hour (if that is still on this day).
+function computeLandmarks(trips, day) {
+    const dayStartMs = nyWallClockToEpochMs(`${day}T00:00:00.000`);
+    const hourOf = (ms) => Math.floor((ms - dayStartMs) / 3600000);
+    return LANDMARKS.map((lm) => {
+        const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, electric: 0, classic: 0 }));
+        for (const t of trips) {
+            let hour = -1;
+            if (metresBetween(t.lat, t.lng, lm.lat, lm.lng) <= RADIUS_M) hour = hourOf(t.startMs);
+            else if (metresBetween(t.endLat, t.endLng, lm.lat, lm.lng) <= RADIUS_M) hour = hourOf(t.endMs);
+            if (hour < 0 || hour > 23) continue;
+            if (t.electric) hourly[hour].electric += 1;
+            else hourly[hour].classic += 1;
+        }
+        const best = hourly.reduce((a, b) => (b.electric + b.classic > a.electric + a.classic ? b : a));
+        return {
+            ...lm,
+            radiusM: RADIUS_M,
+            hourly,
+            busiestHour: { ...best, total: best.electric + best.classic },
+        };
+    });
 }
 
 // --- hotspots: grid-cell clusters × 5-min in-motion buckets -----------------
@@ -302,25 +317,31 @@ function serializeHotspots(clusters) {
 }
 
 async function main() {
-    const day = chosenDay();
-    console.log(`📅 Chosen day (from output_centroids.json): ${day}`);
+    const day = DAY;
+    console.log(`📅 Day: ${day}`);
+    fs.mkdirSync(dayDir(day), { recursive: true });
 
     console.log('🦆 Spawning in-memory DuckDB...');
     const instance = await DuckDBInstance.create(':memory:');
     const con = await DuckDBConnection.create(instance);
 
     console.log('⛏️  Loading full filtered day (as strings, epochs computed in JS)...');
-    const trips = await loadDay(con, day);
+    const allTrips = await loadDay(con, day);
+    const trips = allTrips.filter((t) => rideInScope(t.lng, t.lat, t.endLng, t.endLat));
     if (!trips.length) throw new Error('❌ No trips loaded for the chosen day.');
-    console.log(`   Loaded ${trips.length} filtered-valid trips.`);
+    console.log(`   Loaded ${allTrips.length} filtered-valid trips; ${trips.length} start or end in ${SCOPE}.`);
     verifyEpochParity(trips);
 
     // day-stats
-    const dayStats = { ...computeDayStats(trips, day), ...computeStoryStats(trips, day) };
+    const dayStats = { scope: SCOPE, ...computeDayStats(trips, day), ...computeStoryStats(trips, day) };
     if (Math.max(...dayStats.activeByMinute.values) !== dayStats.peakActive) {
         throw new Error('❌ activeByMinute peak does not match peakActive.');
     }
     fs.writeFileSync(DAY_STATS_PATH, JSON.stringify(dayStats, null, 2));
+
+    // landmarks
+    const landmarks = computeLandmarks(trips, day);
+    fs.writeFileSync(LANDMARKS_PATH, JSON.stringify(landmarks));
 
     // hotspots
     const ranked = computeHotspots(trips);
@@ -332,7 +353,13 @@ async function main() {
     console.log(`   date=${dayStats.date}  totalTrips=${dayStats.totalTrips} (filtered-valid)`);
     console.log(`   peakMinute=${dayStats.peakMinute} (NY)  peakActive=${dayStats.peakActive}  peakEpochMs=${dayStats.peakEpochMs}`);
     console.log(`   nightLow=${dayStats.nightLow.active} @ ${dayStats.nightLow.minute}  morningPeak=${dayStats.morningPeak.active} @ ${dayStats.morningPeak.minute}  straightLineKm=${dayStats.straightLineKm}`);
-    console.log(`   ebikeShare=${dayStats.ebikeShare}  medianRide=${dayStats.medianRideMinutes} min / ${dayStats.medianRideKm} km`);
+    console.log(`   ebikeShare=${dayStats.ebikeShare}  memberShare=${dayStats.memberShare}  medianRide=${dayStats.medianRideMinutes} min / ${dayStats.medianRideKm} km`);
+
+    console.log('\n📌 landmarks.json (busiest hour, rides starting or ending within ' + RADIUS_M + ' m):');
+    for (const lm of landmarks) {
+        const b = lm.busiestHour;
+        console.log(`   ${lm.name.padEnd(24)} ${String(b.hour).padStart(2, '0')}:00  ${b.total} rides (${b.electric} e-bike, ${b.classic} classic)`);
+    }
 
     const sizeKB = (Buffer.byteLength(json) / 1024).toFixed(1);
     const totalBuckets = clusters.reduce((s, c) => s + c.counts.length, 0);

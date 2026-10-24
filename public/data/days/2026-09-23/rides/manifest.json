@@ -1,0 +1,130 @@
+{
+  "format": "cbr1",
+  "scope": "manhattan",
+  "date": "2026-09-23",
+  "dayStartEpochMs": 1790136000000,
+  "totalRides": 124300,
+  "fallbackRides": 0,
+  "hours": [
+    {
+      "hour": 0,
+      "rides": 885,
+      "bytes": 36048
+    },
+    {
+      "hour": 1,
+      "rides": 412,
+      "bytes": 17493
+    },
+    {
+      "hour": 2,
+      "rides": 211,
+      "bytes": 8705
+    },
+    {
+      "hour": 3,
+      "rides": 148,
+      "bytes": 6355
+    },
+    {
+      "hour": 4,
+      "rides": 262,
+      "bytes": 11340
+    },
+    {
+      "hour": 5,
+      "rides": 1060,
+      "bytes": 39641
+    },
+    {
+      "hour": 6,
+      "rides": 3160,
+      "bytes": 115828
+    },
+    {
+      "hour": 7,
+      "rides": 7049,
+      "bytes": 263891
+    },
+    {
+      "hour": 8,
+      "rides": 11353,
+      "bytes": 430448
+    },
+    {
+      "hour": 9,
+      "rides": 7590,
+      "bytes": 277166
+    },
+    {
+      "hour": 10,
+      "rides": 4816,
+      "bytes": 173317
+    },
+    {
+      "hour": 11,
+      "rides": 4620,
+      "bytes": 166884
+    },
+    {
+      "hour": 12,
+      "rides": 5211,
+      "bytes": 186098
+    },
+    {
+      "hour": 13,
+      "rides": 5540,
+      "bytes": 198072
+    },
+    {
+      "hour": 14,
+      "rides": 6166,
+      "bytes": 224656
+    },
+    {
+      "hour": 15,
+      "rides": 7252,
+      "bytes": 271970
+    },
+    {
+      "hour": 16,
+      "rides": 9338,
+      "bytes": 356457
+    },
+    {
+      "hour": 17,
+      "rides": 13953,
+      "bytes": 541097
+    },
+    {
+      "hour": 18,
+      "rides": 12286,
+      "bytes": 464267
+    },
+    {
+      "hour": 19,
+      "rides": 8206,
+      "bytes": 301778
+    },
+    {
+      "hour": 20,
+      "rides": 5455,
+      "bytes": 201634
+    },
+    {
+      "hour": 21,
+      "rides": 4273,
+      "bytes": 159455
+    },
+    {
+      "hour": 22,
+      "rides": 3138,
+      "bytes": 117058
+    },
+    {
+      "hour": 23,
+      "rides": 1916,
+      "bytes": 73981
+    }
+  ]
+}

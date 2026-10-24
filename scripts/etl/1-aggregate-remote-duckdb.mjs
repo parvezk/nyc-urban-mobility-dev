@@ -1,22 +1,19 @@
 /**
  * 1-aggregate-remote-duckdb.mjs
  *
- * ETL Stage 1 — Citi Bike (June 2026) origin/destination sampler.
+ * ETL Stage 1: sample one day of Citi Bike rides.
  *
- * Replaces the retired NYC TLC taxi pipeline (Socrata JSON fetch + taxi-zone
- * shapefile spatial join). Citi Bike trip CSVs already carry real start/end
- * lat-lng per ride, so there is NO shapefile, NO httpfs, NO spatial join —
- * DuckDB reads the local CSVs directly.
+ *   node scripts/etl/1-aggregate-remote-duckdb.mjs --date 2026-09-16 [--sample 6000]
  *
- * Input : scripts/etl/202606/*.csv  (six part files, ~1 GB, 2020+ schema)
- * Output: scripts/etl/output_centroids.json  (contract shared with Stage 2)
+ * Input : scripts/etl/data/<YYYYMM>/**.csv  (downloaded by Stage 0)
+ * Output: scripts/etl/work/<date>/centroids.json  (contract shared with Stage 2)
  *
- *   [{ vendor_type, pickup_time, dropoff_time,
+ *   [{ vendor_type, member, pickup_time, dropoff_time,
  *      start:{lng,lat}, end:{lng,lat} }]
  *
  * TIMEZONE: CSV times are zone-less NY wall-clock strings (e.g.
  * "2026-06-10 08:05:03.403"), emitted as-is. Stages 2/4 must convert via
- * `nyWallClockToEpochMs()` (lib/ny-time.mjs) — a fixed America/New_York zone
+ * `nyWallClockToEpochMs()` (lib/ny-time.mjs), a fixed America/New_York zone
  * lookup, not `new Date(str)`, which shifts by the UTC offset on non-NY
  * hosts. verifyTimezone() below round-trips one trip to catch drift.
  */
@@ -24,123 +21,51 @@ import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import fs from 'fs';
 import path from 'path';
 import { nyWallClockToEpochMs } from './lib/ny-time.mjs';
+import { SCOPE, rideInScope } from './lib/scope.mjs';
+import { csvGlob, monthOf, parseArgs, requireDate, tripFilterSql, workDir } from './lib/paths.mjs';
 
-const ETL_DIR = path.join(process.cwd(), 'scripts', 'etl');
-const CSV_GLOB = path.join(ETL_DIR, '202606', '*.csv');
-const OUT_PATH = path.join(ETL_DIR, 'output_centroids.json');
+const args = parseArgs();
+const DAY = requireDate(args);
+const CSV_GLOB = csvGlob(monthOf(DAY));
+const OUT_PATH = path.join(workDir(DAY), 'centroids.json');
 
-// Read sample size from argv (default 6000). Contract with Stage 2.
-const SAMPLE_SIZE = Number.parseInt(process.argv[2], 10) || 6000;
-
-// Two candidate weekdays supplied by the build spec; pick the healthier one.
-const CANDIDATE_DAYS = ['2026-06-10', '2026-06-17'];
-// A weekday whose volume falls below this fraction of the weekday median is
-// treated as an anomalous dip (e.g. a rain day) and skipped.
-const DIP_FRACTION = 0.85;
-
-// 2020+ Citi Bike schema — abort loudly if the feed drifted.
-const REQUIRED_COLS = [
-    'ride_id', 'rideable_type', 'started_at', 'ended_at',
-    'start_station_name', 'start_lat', 'start_lng', 'end_lat', 'end_lng',
-];
+// Rides to sample. ~6k keeps 60fps and the payload under the 2 MB SLO.
+const SAMPLE_SIZE = Number.parseInt(args.sample, 10) || 6000;
 
 const bn = (v) => (typeof v === 'bigint' ? Number(v) : v);
 
-async function assertSchema(con) {
-    console.log('🔎 Asserting 2020+ Citi Bike schema...');
-    const reader = await con.runAndReadAll(
-        `DESCRIBE SELECT * FROM read_csv_auto('${CSV_GLOB}', union_by_name=true) LIMIT 0`
-    );
-    const cols = new Set(reader.getRowObjects().map((r) => String(r.column_name)));
-    const missing = REQUIRED_COLS.filter((c) => !cols.has(c));
-    if (missing.length) {
-        throw new Error(
-            `❌ SCHEMA DRIFT — missing columns: ${missing.join(', ')}\n` +
-            `   Found: ${[...cols].join(', ')}`
-        );
-    }
-    console.log(`   ✅ All ${REQUIRED_COLS.length} required columns present.`);
-}
-
-async function chooseDay(con) {
-    console.log('\n📊 Trips-per-day (June 2026):');
-    const reader = await con.runAndReadAll(`
-        SELECT CAST(started_at AS DATE) AS d,
-               dayname(started_at)      AS wd,
-               COUNT(*)                 AS n
-        FROM read_csv_auto('${CSV_GLOB}', union_by_name=true)
-        WHERE CAST(started_at AS DATE) BETWEEN DATE '2026-06-01' AND DATE '2026-06-30'
-        GROUP BY 1, 2
-        ORDER BY 1
-    `);
-    const rows = reader.getRowObjects().map((r) => ({
-        d: String(r.d), wd: String(r.wd), n: Number(bn(r.n)),
-    }));
-
-    const isWeekday = (wd) => wd !== 'Saturday' && wd !== 'Sunday';
-    for (const r of rows) {
-        const mark = CANDIDATE_DAYS.includes(r.d) ? '  <- candidate' : '';
-        console.log(`   ${r.d}  ${r.wd.padEnd(9)} ${String(r.n).padStart(7)}${mark}`);
-    }
-
-    const weekdayVols = rows.filter((r) => isWeekday(r.wd)).map((r) => r.n).sort((a, b) => a - b);
-    const median = weekdayVols[Math.floor(weekdayVols.length / 2)];
-    const dipThreshold = Math.round(median * DIP_FRACTION);
-    console.log(`   weekday median = ${median}, dip threshold (<${(DIP_FRACTION * 100)}%) = ${dipThreshold}`);
-
-    const candidates = CANDIDATE_DAYS
-        .map((d) => rows.find((r) => r.d === d))
-        .filter(Boolean)
-        .map((r) => ({ ...r, isDip: r.n < dipThreshold }));
-
-    if (!candidates.length) throw new Error('❌ No candidate days found in June 2026 data.');
-
-    // Prefer a non-dip day; among healthy candidates take the highest volume
-    // (more rides -> denser, more representative animation).
-    const healthy = candidates.filter((c) => !c.isDip);
-    const pool = healthy.length ? healthy : candidates;
-    pool.sort((a, b) => b.n - a.n);
-    const chosen = pool[0];
-
-    for (const c of candidates) {
-        console.log(
-            `   candidate ${c.d}: ${c.n} trips` +
-            `${c.isDip ? ' (ANOMALOUS DIP — skipped)' : ' (healthy)'}`
-        );
-    }
-    console.log(
-        `👉 Chosen day: ${chosen.d} (${chosen.n} trips) — ` +
-        `healthiest candidate, no anomalous dip vs weekday median ${median}.`
-    );
-    return chosen.d;
-}
-
 async function extractSample(con, day) {
-    // Filters: non-null coords; duration 60s..4h (drops dock glitches /
-    // rebalancing); plausible NYC bbox. Emit timestamps as zone-less ISO with
+    // Filters live in lib/paths.mjs (shared with Stage 4). Emit timestamps as zone-less ISO with
     // a 'T' separator and 3-digit ms (matches Stage 2's local-parse contract).
     const query = `
         WITH src AS (
-            SELECT rideable_type, started_at, ended_at,
+            SELECT rideable_type, member_casual, started_at, ended_at,
                    start_lat, start_lng, end_lat, end_lng
             FROM read_csv_auto('${CSV_GLOB}', union_by_name=true)
-            WHERE CAST(started_at AS DATE) = DATE '${day}'
-              AND start_lat IS NOT NULL AND start_lng IS NOT NULL
-              AND end_lat   IS NOT NULL AND end_lng   IS NOT NULL
-              AND date_diff('second', started_at, ended_at) BETWEEN 60 AND 14400
-              AND start_lat BETWEEN 40.5 AND 41.0 AND end_lat BETWEEN 40.5 AND 41.0
-              AND start_lng BETWEEN -74.3 AND -73.6 AND end_lng BETWEEN -74.3 AND -73.6
+            WHERE ${tripFilterSql(day)}
         )
         SELECT rideable_type                                   AS vendor_type,
+               member_casual = 'member'                        AS member,
                strftime(started_at, '%Y-%m-%dT%H:%M:%S.%g')    AS pickup_time,
                strftime(ended_at,   '%Y-%m-%dT%H:%M:%S.%g')    AS dropoff_time,
                start_lng, start_lat, end_lng, end_lat
         FROM src
-        USING SAMPLE ${SAMPLE_SIZE} ROWS
+        ORDER BY started_at
     `;
     const reader = await con.runAndReadAll(query);
-    return reader.getRowObjects().map((r) => ({
+    const inScope = reader.getRowObjects()
+        .filter((r) => rideInScope(bn(r.start_lng), bn(r.start_lat), bn(r.end_lng), bn(r.end_lat)));
+    // Seeded shuffle so re-runs pick the same sample.
+    let seed = 20260923;
+    const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    for (let i = inScope.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [inScope[i], inScope[j]] = [inScope[j], inScope[i]];
+    }
+    console.log(`   ${inScope.length} rides touch ${SCOPE}; sampling ${Math.min(SAMPLE_SIZE, inScope.length)}`);
+    return inScope.slice(0, SAMPLE_SIZE).map((r) => ({
         vendor_type: String(r.vendor_type),
+        member: Boolean(r.member),
         pickup_time: String(r.pickup_time),
         dropoff_time: String(r.dropoff_time),
         start: { lng: bn(r.start_lng), lat: bn(r.start_lat) },
@@ -175,27 +100,22 @@ function verifyTimezone(trips) {
 }
 
 async function main() {
-    if (!fs.existsSync(path.join(ETL_DIR, '202606'))) {
-        throw new Error('❌ scripts/etl/202606/ not found — download the Citi Bike CSVs first.');
-    }
-
     console.log('🦆 Spawning in-memory DuckDB...');
     const instance = await DuckDBInstance.create(':memory:');
     const con = await DuckDBConnection.create(instance);
 
-    await assertSchema(con);
-    const day = await chooseDay(con);
-
-    console.log(`\n⛏️  Sampling ${SAMPLE_SIZE} filtered rides from ${day}...`);
-    const trips = await extractSample(con, day);
-    if (!trips.length) throw new Error('❌ Sample returned 0 rows — check filters/day.');
+    console.log(`⛏️  Sampling ${SAMPLE_SIZE} filtered rides from ${DAY}...`);
+    const trips = await extractSample(con, DAY);
+    if (!trips.length) throw new Error(`❌ Sample returned 0 rows for ${DAY}. Did Stage 0 download that month?`);
 
     verifyTimezone(trips);
 
-    fs.writeFileSync(OUT_PATH, JSON.stringify(trips, null, 2));
+    fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
+    fs.writeFileSync(OUT_PATH, JSON.stringify(trips));
     const kinds = trips.reduce((m, t) => ((m[t.vendor_type] = (m[t.vendor_type] || 0) + 1), m), {});
+    const members = trips.filter((t) => t.member).length;
     console.log(`\n✅ Wrote ${trips.length} trips -> ${OUT_PATH}`);
-    console.log(`   vendor_type breakdown: ${JSON.stringify(kinds)}`);
+    console.log(`   vendor_type breakdown: ${JSON.stringify(kinds)}  members: ${members}`);
 }
 
 main().catch((err) => {
