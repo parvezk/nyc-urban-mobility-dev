@@ -1,0 +1,11 @@
+---
+description: Keep the current Vercel production deployment frozen
+alwaysApply: true
+---
+
+The live site https://nyc-urban-mobility.vercel.app is frozen.
+
+- New work ships as a pull request preview only.
+- Do not run `vercel --prod`, `vercel deploy --prod`, or `vercel promote`.
+- Do not push, merge, or delete `archive/poc`. It is the Vercel production branch and it is locked.
+- Do not change the Vercel production branch or the production domain.

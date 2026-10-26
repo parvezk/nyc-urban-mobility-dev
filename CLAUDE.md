@@ -2,6 +2,15 @@
 
 > Project guide for AI-assisted development. Read this file before making any changes.
 
+## Live site is frozen
+
+https://nyc-urban-mobility.vercel.app stays on the current deployment.
+
+- Open a pull request for new work. Do not promote it to production.
+- Do not run `vercel --prod`, `vercel deploy --prod`, or `vercel promote`.
+- Do not push, merge, or delete `archive/poc`. That branch is the Vercel production branch, and it is locked.
+- Do not change the Vercel production branch or the production domain.
+
 ---
 
 ## What This App Does
