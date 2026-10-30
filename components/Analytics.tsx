@@ -1,8 +1,8 @@
 import Script from "next/script";
 
 // PostHog page views (visits, daily/weekly trends, visitor city and country).
-// The project key is public by design: it ships to every browser anyway.
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "";
+// The project key is a public client token (it ships to every browser), not a secret.
+const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "phc_sCCtP39fwb4Bu2J6TTNNZr6tMpocRKPvhWYZ9CGdA49r";
 const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
 export function Analytics() {
