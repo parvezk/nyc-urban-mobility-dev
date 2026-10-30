@@ -1,0 +1,51 @@
+Which data lane should be the HERO animated trip layer for the deep round to design + validate?            │
+                                                                                                           │**Q1 — Economic fields:** Confirmed in the 2023 Socrata source. `scripts/etl/trips.json` carries `fare_
+  1. Live MTA buses (Recommended)                                                                          │amount`, `tip_amount`, `trip_distance`, `total_amount`, `congestion_surcharge` for every record. B's st
+     True real-time GPS positions polled ~30s into live bus trails over Manhattan. Max 'wow' and           │ory is not stranded on 2015 data. The blocker is a single DuckDB SELECT that drops them — adding 5 fiel
+     genuinely shareable ('right now'). Costs a small polling/buffer service + protobuf parsing + a        │d names fixes it.
+     brief warm-up. Best fulfills your real-time wish.                                                     │
+  2. GTFS schedule (simulated-live)                                                                        │**Q2 — Timestamp flattening:** B's "41-minute flattened clock" was observed on `public/data/trips.json`
+     Animate scheduled buses/subways along route shapes — always reflects the current timetable,           │ — a dead legacy file the renderer doesn't use. The real pipeline (`routed_trips.json` → `/api/trips` →
+     unlimited volume, no keys/privacy, no live infra. Honest caveat: shows where transit SHOULD be,       │ `MapViewport.tsx`) preserves real epoch-ms timestamps untouched all the way to the TripsLayer. The fla
+     not actual GPS.                                                                                       │ttening B described doesn't exist in the live path. A full-day fetch genuinely delivers 6AM–11PM real c
+  3. Fresh Citi Bike trips                                                                                 │lock times.
+     Real individual bike trips (~8 weeks old, Apr 2026) routed to streets via the existing ETL. Lowest    │
+     engineering risk and real OD trips, but not live.                                                     │**Q3 — Hybrid:** Both fare fields and real timestamps survive the 2023 pipeline. The complete diff is:
+  4. Live buses + GTFS fallback                                                                            │5 field names in the DuckDB SELECT, a WHERE window change to 06:00–23:00, and a pass-through in the rou
+     Lane 1 as hero, Lane 2 as cold-start baseline so the map is never empty. Most robust 'live'           │ting script. One OSRM run covers both stories simultaneously.
+     experience; slightly more to build.                                                                   │
+❯ 5. Type something.                                                                                       │**Q4 — Recommendation:** Build the hybrid foundation (widened window + fare fields) in one ETL run. The
+──────────────────────────────────────────────────────
+==
+How ambitious should v1 be?                                                                                │   started 16:44:44 — working…
+                                                                                                           │`docs/storytelling/team/DATA_r2.md` is written. Here's the verdict summary:
+❯ 1. Single hero layer, ship fast                                                                          │
+     One mover type only. Get it live, catchy, and posted quickly; add layers later.                       │**Q1 — Economic fields:** Confirmed in the 2023 Socrata source. `scripts/etl/trips.json` carries `fare_
+  2. Hero + cinematic second layer                                                                         │amount`, `tip_amount`, `trip_distance`, `total_amount`, `congestion_surcharge` for every record. B's st
+     Add a complementary mover — e.g. AIS boats gliding the Hudson/East River beneath the buses — for      │ory is not stranded on 2015 data. The blocker is a single DuckDB SELECT that drops them — adding 5 fiel
+     visual contrast and polish. More work.                                                                │d names fixes it.
+  3. Type something.
+  ==
+
+
+Lane: 1. Live MTA buses 🟢 real-time                                                                 │
+  What it is: Poll MTA Bus Time GTFS-RT (VehiclePositions, real lat/lon, ~30s) → accumulate each bus's │**Q1 — Economic fields:** Confirmed in the 2023 Socrata source. `scripts/etl/trips.json` carries `fare_a
+    positions into live trails                                                                         │mount`, `tip_amount`, `trip_distance`, `total_amount`, `congestion_surcharge` for every record. B's stor
+  Freshness: Literally now                                                                             │y is not stranded on 2015 data. The blocker is a single DuckDB SELECT that drops them — adding 5 field n
+  Effort: Med-high — needs a polling/buffer service (cron can't do 30s), protobuf parsing, ~minutes    │ames fixes it.
+    warm-up                                                                                            │
+  One-line hook: "Every NYC bus, crawling the Manhattan grid — live, right now."                       │**Q2 — Timestamp flattening:** B's "41-minute flattened clock" was observed on `public/data/trips.json`
+  ────────────────────────────────────────                                                             │— a dead legacy file the renderer doesn't use. The real pipeline (`routed_trips.json` → `/api/trips` → `
+  Lane: 2. GTFS schedule (simulated-live)                                                              │MapViewport.tsx`) preserves real epoch-ms timestamps untouched all the way to the TripsLayer. The flatte
+  What it is: Interpolate scheduled buses/trains along route shapes from the static timetable          │ning B described doesn't exist in the live path. A full-day fetch genuinely delivers 6AM–11PM real clock
+  Freshness: Always "current" (the live schedule)                                                      │ times.
+  Effort: Med (~150 lines, no live infra, no OSRM)                                                     │
+  One-line hook: "Every MTA bus running right now, exactly where the schedule says." (caveat: where    │**Q3 — Hybrid:** Both fare fields and real timestamps survive the 2023 pipeline. The complete diff is: 5
+  they                                                                                                 │ field names in the DuckDB SELECT, a WHERE window change to 06:00–23:00, and a pass-through in the routi
+     should be, not actual GPS)                                                                        │ng script. One OSRM run covers both stories simultaneously.
+  ────────────────────────────────────────                                                             │
+  Lane: 3. Fresh Citi Bike trips                                                                       │**Q4 — Recommendation:** Build the hybrid foundation (widened window + fare fields) in one ETL run. The
+  What it is: Real start→end bike trips routed to streets via the existing OSRM pipeline               │OSRM routing is the only slow step regardless of which story ships — running it once pre-builds both. Ef
+  Freshness: ~8 weeks (Apr 2026 data)                                                                  │fort: ~2.5 hours total. A's temporal shift-change and B's economic deadweight-loss story both become bui
+  Effort: Low — reuses current ETL                                                                     │ldable on the same real Dec 12 2023 data.
+  One-line hook: "Every bike unlocked in NYC last month, tracing its real street path."
