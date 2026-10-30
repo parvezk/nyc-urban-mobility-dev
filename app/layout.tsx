@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 // Important for MapLibre CSS
 import "maplibre-gl/dist/maplibre-gl.css";
+import { Analytics } from "@/components/Analytics";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "One day of Citi Bike",
@@ -15,7 +17,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
