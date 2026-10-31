@@ -4,8 +4,8 @@ import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export const metadata: Metadata = {
-  title: "NYC Urban Mobility Modernized",
-  description: "High performance rendering of NYC Taxi Data.",
+  title: "One day of Citi Bike",
+  description: "Every Citi Bike ride in New York on one day, drawn as moving light.",
 };
 
 export default function RootLayout({

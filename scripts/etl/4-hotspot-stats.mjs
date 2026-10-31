@@ -6,7 +6,9 @@
  * Citi Bike CSVs directly through DuckDB.
  *
  * Emits:
- *   public/data/day-stats.json  { date, totalTrips, peakMinute, peakEpochMs, peakActive }
+ *   public/data/day-stats.json  { date, totalTrips, peakMinute, peakEpochMs, peakActive,
+ *                                 nightLow, morningPeak, straightLineKm, ebikeShare,
+ *                                 medianRideMinutes, medianRideKm, activeByMinute }
  *   public/data/hotspots.json   { bucketMs, clusters:[{ lng, lat, name, counts:[[bucketEpochMs, activeCount],…] }] }
  *
  * --- TIMEZONE / EPOCH PARITY (critical) ------------------------------------
@@ -69,7 +71,8 @@ async function loadDay(con, day) {
         SELECT strftime(started_at, '%Y-%m-%dT%H:%M:%S.%g') AS started_at,
                strftime(ended_at,   '%Y-%m-%dT%H:%M:%S.%g') AS ended_at,
                start_station_name                          AS station,
-               start_lat, start_lng
+               rideable_type,
+               start_lat, start_lng, end_lat, end_lng
         FROM read_csv_auto('${CSV_GLOB}', union_by_name=true)
         WHERE CAST(started_at AS DATE) = DATE '${day}'
           AND start_lat IS NOT NULL AND start_lng IS NOT NULL
@@ -87,6 +90,8 @@ async function loadDay(con, day) {
             startStr: String(r.started_at), // retained for a genuine TZ round-trip check
             station: r.station == null ? '' : String(r.station),
             lat: bn(r.start_lat), lng: bn(r.start_lng),
+            endLat: bn(r.end_lat), endLng: bn(r.end_lng),
+            electric: String(r.rideable_type) === 'electric_bike',
         };
     });
 }
@@ -149,6 +154,86 @@ function computeDayStats(trips, day) {
     }
 
     return { date: day, totalTrips: trips.length, peakMinute, peakEpochMs, peakActive };
+}
+
+// --- story stats for the social clip (/clip) --------------------------------
+// activeByMinute[i] = the most bikes in motion at any instant during minute i
+// (counted from local midnight). Using the max-in-minute means the curve's
+// highest value equals peakActive exactly, so the clip's counter and its
+// captions always agree.
+const EARTH_RADIUS_KM = 6371.0088;
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLng = (lng2 - lng1) * rad;
+    const h = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
+}
+
+function computeStoryStats(trips, day) {
+    const dayStartMs = nyWallClockToEpochMs(`${day}T00:00:00.000`);
+    const events = [];
+    for (const t of trips) {
+        events.push([t.startMs, 1]);
+        events.push([t.endMs, -1]);
+    }
+    events.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+
+    const lastMs = events[events.length - 1][0];
+    const n = Math.floor((lastMs - dayStartMs) / 60000) + 1;
+    const maxIn = new Array(n).fill(-1);
+    const endActive = new Array(n).fill(-1);
+    let active = 0;
+    for (const [ts, delta] of events) {
+        active += delta;
+        const i = Math.floor((ts - dayStartMs) / 60000);
+        if (i < 0) continue;
+        if (active > maxIn[i]) maxIn[i] = active;
+        endActive[i] = active;
+    }
+    const values = [];
+    let carry = 0; // bikes in motion at the start of the minute
+    for (let i = 0; i < n; i++) {
+        if (maxIn[i] < 0) { values.push(carry); continue; }
+        values.push(Math.max(carry, maxIn[i]));
+        carry = endActive[i];
+    }
+
+    // Pick the extreme minute within [fromHour, toHour) local time.
+    const pick = (fromHour, toHour, better) => {
+        let best = fromHour * 60;
+        for (let i = fromHour * 60; i < Math.min(toHour * 60, n); i++) {
+            if (better(values[i], values[best])) best = i;
+        }
+        const epochMs = dayStartMs + best * 60000;
+        return { minute: nyHHMM(epochMs), epochMs, active: values[best] };
+    };
+
+    let straightLineKm = 0, electric = 0;
+    const kms = [], minutes = [];
+    for (const t of trips) {
+        const km = haversineKm(t.lat, t.lng, t.endLat, t.endLng);
+        straightLineKm += km;
+        kms.push(km);
+        minutes.push((t.endMs - t.startMs) / 60000);
+        if (t.electric) electric += 1;
+    }
+    const median = (xs) => {
+        const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+
+    return {
+        nightLow: pick(1, 6, (a, b) => a < b),
+        morningPeak: pick(5, 11, (a, b) => a > b),
+        straightLineKm: Math.round(straightLineKm),
+        ebikeShare: +(electric / trips.length).toFixed(4),
+        medianRideMinutes: +median(minutes).toFixed(1),
+        medianRideKm: +median(kms).toFixed(2),
+        activeByMinute: { startEpochMs: dayStartMs, stepMs: 60000, values },
+    };
 }
 
 // --- hotspots: grid-cell clusters × 5-min in-motion buckets -----------------
@@ -231,7 +316,10 @@ async function main() {
     verifyEpochParity(trips);
 
     // day-stats
-    const dayStats = computeDayStats(trips, day);
+    const dayStats = { ...computeDayStats(trips, day), ...computeStoryStats(trips, day) };
+    if (Math.max(...dayStats.activeByMinute.values) !== dayStats.peakActive) {
+        throw new Error('❌ activeByMinute peak does not match peakActive.');
+    }
     fs.writeFileSync(DAY_STATS_PATH, JSON.stringify(dayStats, null, 2));
 
     // hotspots
@@ -243,6 +331,8 @@ async function main() {
     console.log('\n📈 day-stats.json:');
     console.log(`   date=${dayStats.date}  totalTrips=${dayStats.totalTrips} (filtered-valid)`);
     console.log(`   peakMinute=${dayStats.peakMinute} (NY)  peakActive=${dayStats.peakActive}  peakEpochMs=${dayStats.peakEpochMs}`);
+    console.log(`   nightLow=${dayStats.nightLow.active} @ ${dayStats.nightLow.minute}  morningPeak=${dayStats.morningPeak.active} @ ${dayStats.morningPeak.minute}  straightLineKm=${dayStats.straightLineKm}`);
+    console.log(`   ebikeShare=${dayStats.ebikeShare}  medianRide=${dayStats.medianRideMinutes} min / ${dayStats.medianRideKm} km`);
 
     const sizeKB = (Buffer.byteLength(json) / 1024).toFixed(1);
     const totalBuckets = clusters.reduce((s, c) => s + c.counts.length, 0);
